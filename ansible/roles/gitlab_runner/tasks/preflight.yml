@@ -1,0 +1,55 @@
+---
+- name: Verify supported operating system family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in gitlab_runner_supported_os_families
+    fail_msg: >-
+      Unsupported OS family '{{ ansible_os_family }}'.
+      Supported families: {{ gitlab_runner_supported_os_families | join(', ') }}.
+  tags:
+    - always
+
+- name: Verify supported distribution and release
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution in gitlab_runner_supported_distributions
+      - ansible_distribution_version in
+        gitlab_runner_supported_distributions[ansible_distribution]
+    fail_msg: >-
+      Unsupported target {{ ansible_distribution }}
+      {{ ansible_distribution_version }}.
+      Supported releases: Debian 12/13 and Ubuntu 22.04/24.04.
+  tags:
+    - always
+
+- name: Validate GitLab instance URL
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_gitlab_url is string
+      - gitlab_runner_gitlab_url is match('^https://[^/]+/?$')
+    fail_msg: >-
+      gitlab_runner_gitlab_url must be an HTTPS base URL,
+      for example https://gitlab.com.
+  tags:
+    - always
+
+- name: Validate runner executor
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_executor in ['docker', 'shell']
+    fail_msg: >-
+      Unsupported executor '{{ gitlab_runner_executor }}'.
+      Supported executors are docker and shell.
+  tags:
+    - always
+
+- name: Validate Docker configuration when Docker executor is selected
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_docker_image | length > 0
+      - gitlab_runner_docker_package | length > 0
+    fail_msg: >-
+      Docker executor requires a Docker image and Docker package.
+  when: gitlab_runner_executor == 'docker'
+  tags:
+    - always

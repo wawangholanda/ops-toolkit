@@ -1,0 +1,99 @@
+---
+- name: Install local runner configuration helper
+  ansible.builtin.copy:
+    src: manage_runner_config.py
+    dest: /usr/local/sbin/manage-gitlab-runner-config
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Inspect requested runner token and local name
+  ansible.builtin.command:
+    argv:
+      - python3
+      - /usr/local/sbin/manage-gitlab-runner-config
+    stdin: "{{ {'token': gitlab_runner_auth_token, 'name': gitlab_runner_name} | to_json }}"
+    stdin_add_newline: true
+  register: gitlab_runner_config_action
+  changed_when: >-
+    gitlab_runner_config_action.rc == 0 and
+    (gitlab_runner_config_action.stdout | from_json).action == 'renamed'
+  failed_when: false
+  no_log: true
+  notify: Restart GitLab Runner
+
+- name: Stop if the requested runner name is already used by another token
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_config_action.rc != 3
+    fail_msg: >-
+      Runner name already exists for a different token. Choose another name
+      and run quick-start.sh again. No runner was registered or removed.
+  no_log: true
+
+- name: Require a valid local runner configuration check
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_config_action.rc == 0
+    fail_msg: >-
+      Could not safely inspect or update /etc/gitlab-runner/config.toml.
+      Review the target configuration before retrying.
+  no_log: true
+  notify: Restart GitLab Runner
+
+- name: Install Docker executor configuration template
+  ansible.builtin.template:
+    src: config.toml.j2
+    dest: /etc/gitlab-runner/config-template.toml
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - (gitlab_runner_config_action.stdout | from_json).action == 'register'
+    - gitlab_runner_executor == 'docker'
+
+- name: Register an additional GitLab Runner with Docker executor
+  ansible.builtin.command:
+    argv:
+      - gitlab-runner
+      - register
+      - --non-interactive
+      - --url
+      - "{{ gitlab_runner_gitlab_url }}"
+      - --token
+      - "{{ gitlab_runner_auth_token }}"
+      - --name
+      - "{{ gitlab_runner_name }}"
+      - --executor
+      - docker
+      - --docker-image
+      - "{{ gitlab_runner_docker_image }}"
+      - --template-config
+      - /etc/gitlab-runner/config-template.toml
+  when:
+    - (gitlab_runner_config_action.stdout | from_json).action == 'register'
+    - gitlab_runner_executor == 'docker'
+  no_log: true
+  changed_when: true
+  notify: Restart GitLab Runner
+
+- name: Register an additional GitLab Runner with Shell executor
+  ansible.builtin.command:
+    argv:
+      - gitlab-runner
+      - register
+      - --non-interactive
+      - --url
+      - "{{ gitlab_runner_gitlab_url }}"
+      - --token
+      - "{{ gitlab_runner_auth_token }}"
+      - --name
+      - "{{ gitlab_runner_name }}"
+      - --executor
+      - shell
+  when:
+    - (gitlab_runner_config_action.stdout | from_json).action == 'register'
+    - gitlab_runner_executor == 'shell'
+  no_log: true
+  changed_when: true
+  notify: Restart GitLab Runner

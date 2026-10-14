@@ -1,0 +1,45 @@
+---
+# GitLab Runner package and service.
+gitlab_runner_package_state: present
+gitlab_runner_service_enabled: true
+gitlab_runner_service_state: started
+
+# GitLab instance and runner identity.
+gitlab_runner_gitlab_url: "https://gitlab.com"
+gitlab_runner_name: "{{ inventory_hostname }}"
+gitlab_runner_executor: "docker"
+
+# Docker executor defaults.
+gitlab_runner_docker_image: "debian:stable-slim"
+gitlab_runner_docker_privileged: false
+gitlab_runner_docker_volumes:
+  - "/cache"
+
+# Scheduling.
+gitlab_runner_tags:
+  - linux
+  - docker
+gitlab_runner_run_untagged: false
+gitlab_runner_locked: true
+
+# Registration and configuration.
+# Supply the runner authentication token through Ansible Vault
+# or a protected local secret source. Never commit it.
+gitlab_runner_auth_token: ""
+
+# Supported target operating systems for the initial implementation.
+gitlab_runner_supported_os_families:
+  - Debian
+
+# Docker Engine for the Docker executor.
+gitlab_runner_install_docker: true
+gitlab_runner_docker_package: docker.io
+
+# Explicitly supported target releases for the initial implementation.
+gitlab_runner_supported_distributions:
+  Debian:
+    - "12"
+    - "13"
+  Ubuntu:
+    - "22.04"
+    - "24.04"

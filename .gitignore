@@ -3,3 +3,21 @@
 
 # Ada Library Information
 *.ali
+
+# Python virtual environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Local Ansible inventory and secrets
+ansible/inventory/dev/hosts.yml
+ansible/inventory/dev/group_vars/gitlab_runners.yml
+.secrets/
+.env
+.env.*
+!.env.example
+
+# Ansible temporary files and logs
+*.retry
+*.log

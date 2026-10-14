@@ -1,0 +1,19 @@
+---
+# Replace these example values for your environment.
+gitlab_runner_gitlab_url: "https://gitlab.example.com"
+gitlab_runner_name: "{{ inventory_hostname }}"
+
+# Initial supported executor: Docker.
+gitlab_runner_executor: "docker"
+gitlab_runner_docker_image: "debian:stable-slim"
+
+# Runner scheduling settings.
+gitlab_runner_tags:
+  - linux
+  - docker
+gitlab_runner_run_untagged: false
+
+# Security: do not enable privileged mode by default.
+gitlab_runner_docker_privileged: false
+gitlab_runner_docker_volumes:
+  - "/cache"

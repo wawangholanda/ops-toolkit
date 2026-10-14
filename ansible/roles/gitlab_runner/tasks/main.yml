@@ -1,0 +1,20 @@
+---
+- name: Validate role inputs and target platform
+  ansible.builtin.import_tasks: preflight.yml
+  when: (gitlab_runner_operation | default('register')) == 'register'
+
+- name: Install GitLab Runner and optional Docker
+  ansible.builtin.import_tasks: install.yml
+  when: (gitlab_runner_operation | default('register')) == 'register'
+
+- name: Configure GitLab Runner
+  ansible.builtin.import_tasks: configure.yml
+  when: (gitlab_runner_operation | default('register')) == 'register'
+
+- name: Validate GitLab Runner
+  ansible.builtin.import_tasks: validate.yml
+  when: (gitlab_runner_operation | default('register')) == 'register'
+
+- name: Manage existing GitLab Runners
+  ansible.builtin.import_tasks: manage.yml
+  when: (gitlab_runner_operation | default('register')) in ['list', 'unregister']

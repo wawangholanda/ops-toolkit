@@ -1,0 +1,8 @@
+---
+- name: Install and configure GitLab Runner
+  hosts: gitlab_runners
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: gitlab_runner

@@ -1,0 +1,4 @@
+[[runners]]
+  [runners.docker]
+    privileged = {{ gitlab_runner_docker_privileged | bool | lower }}
+    volumes = {{ gitlab_runner_docker_volumes | to_json }}

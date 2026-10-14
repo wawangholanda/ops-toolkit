@@ -1,0 +1,136 @@
+---
+- name: Install safe runner listing helper
+  ansible.builtin.copy:
+    src: list_runners.py
+    dest: /usr/local/sbin/list-gitlab-runners
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: List configured GitLab Runners without exposing tokens
+  ansible.builtin.command:
+    argv:
+      - python3
+      - /usr/local/sbin/list-gitlab-runners
+  register: gitlab_runner_list
+  changed_when: false
+  when: gitlab_runner_operation in ['list', 'unregister']
+
+- name: Display configured GitLab Runners as a readable table
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json, sys
+
+        runners = json.loads(sys.argv[1])
+        headers = ("No.", "Runner Name", "Executor", "GitLab URL")
+        rows = [
+            (str(i), str(r.get("name", "")), str(r.get("executor", "")),
+             str(r.get("url", "")))
+            for i, r in enumerate(runners, start=1)
+        ]
+        widths = [
+            max(len(headers[i]), *(len(row[i]) for row in rows))
+            for i in range(len(headers))
+        ] if rows else [len(h) for h in headers]
+
+        def line(left, middle, right):
+            return left + middle.join("-" * (w + 2) for w in widths) + right
+
+        def render(row):
+            return "| " + " | ".join(
+                value.ljust(widths[i]) for i, value in enumerate(row)
+            ) + " |"
+
+        print(line("+", "+", "+"))
+        print(render(headers))
+        print(line("+", "+", "+"))
+        for row in rows:
+            print(render(row))
+        print(line("+", "+", "+"))
+        print("Total runners: {}".format(len(rows)))
+      - "{{ gitlab_runner_list.stdout }}"
+  register: gitlab_runner_table
+  changed_when: false
+  when: gitlab_runner_operation == 'list'
+
+- name: Display configured GitLab Runners as machine-readable JSON
+  ansible.builtin.debug:
+    msg: "RUNNER_LIST_JSON={{ gitlab_runner_list.stdout }}"
+  when: >-
+    gitlab_runner_operation == 'unregister' or
+    (gitlab_runner_emit_json | default(false) | bool)
+
+- name: Display formatted GitLab Runner table
+  ansible.builtin.debug:
+    msg: "{{ gitlab_runner_table.stdout_lines }}"
+  when: gitlab_runner_operation == 'list'
+
+- name: Require a specific runner name for unregister
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_target_name | default('') | trim | length > 0
+    fail_msg: "Specify gitlab_runner_target_name. No runner was removed."
+  when: gitlab_runner_operation == 'unregister'
+
+- name: Validate selected runner against local configuration
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json, subprocess, sys
+        target = sys.argv[1]
+        try:
+            runners = json.loads(subprocess.check_output(
+                ["/usr/local/sbin/list-gitlab-runners"],
+                text=True, stderr=subprocess.PIPE
+            ))
+        except Exception:
+            print("Unable to read runner configuration safely.", file=sys.stderr)
+            sys.exit(2)
+
+        if not isinstance(runners, list):
+            print("Invalid runner list.", file=sys.stderr)
+            sys.exit(2)
+
+        names = [r.get("name") for r in runners if isinstance(r, dict)]
+        if len(names) != len(runners) or any(
+            not isinstance(name, str) or not name.strip() for name in names
+        ):
+            print("Runner list contains invalid names.", file=sys.stderr)
+            sys.exit(2)
+
+        if len(names) != len(set(names)):
+            print("Duplicate runner names; refusing to unregister.", file=sys.stderr)
+            sys.exit(2)
+
+        sys.exit(0 if target in names else 1)
+      - "{{ gitlab_runner_target_name }}"
+  register: gitlab_runner_selected_exists
+  changed_when: false
+  failed_when: false
+  when: gitlab_runner_operation == 'unregister'
+
+- name: Refuse to unregister an unknown runner
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_selected_exists.rc == 0
+    fail_msg: >-
+      The selected runner name was not found in the local configuration.
+      No runner was removed.
+  when: gitlab_runner_operation == 'unregister'
+
+- name: Unregister only the selected runner
+  ansible.builtin.command:
+    argv:
+      - gitlab-runner
+      - unregister
+      - --name
+      - "{{ gitlab_runner_target_name }}"
+  when: gitlab_runner_operation == 'unregister'
+  no_log: true
+  changed_when: true
+  notify: Restart GitLab Runner

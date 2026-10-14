@@ -1,0 +1,15 @@
+---
+- name: Enable and start GitLab Runner service
+  ansible.builtin.service:
+    name: gitlab-runner
+    enabled: "{{ gitlab_runner_service_enabled }}"
+    state: "{{ gitlab_runner_service_state }}"
+
+- name: Verify registered GitLab Runners
+  ansible.builtin.command:
+    argv:
+      - gitlab-runner
+      - verify
+  register: gitlab_runner_verify
+  changed_when: false
+  failed_when: gitlab_runner_verify.rc != 0
