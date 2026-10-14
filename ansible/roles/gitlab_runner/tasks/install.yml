@@ -54,3 +54,27 @@
     state: "{{ gitlab_runner_package_state }}"
     update_cache: true
     cache_valid_time: 3600
+- name: Ensure Docker group exists for Shell executor
+  ansible.builtin.group:
+    name: docker
+    state: present
+  when: gitlab_runner_executor == 'shell'
+
+- name: Add GitLab Runner user to Docker group for Shell executor
+  ansible.builtin.user:
+    name: gitlab-runner
+    groups:
+      - docker
+    append: true
+  register: gitlab_runner_docker_group
+  when: gitlab_runner_executor == 'shell'
+  notify: Restart GitLab Runner
+
+- name: Create application deployment base directory for Shell executor
+  ansible.builtin.file:
+    path: /app/www
+    state: directory
+    owner: gitlab-runner
+    group: gitlab-runner
+    mode: "0750"
+  when: gitlab_runner_executor == 'shell'
