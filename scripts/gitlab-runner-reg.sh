@@ -116,31 +116,53 @@ INVENTORY_EOF
 chmod 600 "$INVENTORY"
 
 echo
-echo "Memeriksa SSH: mencoba ~/.ssh/id_rsa terlebih dahulu..."
+
+echo
+read -r -p "Path private SSH key [~/.ssh/id_rsa]: " ssh_key_path
+ssh_key_path="${ssh_key_path:-~/.ssh/id_rsa}"
+
+if [[ "$ssh_key_path" == "~" ]]; then
+  ssh_key_path="$HOME"
+elif [[ "$ssh_key_path" == "~/"* ]]; then
+  ssh_key_path="$HOME/${ssh_key_path#~/}"
+fi
+
 ssh_target="$ssh_user@$server"
-ssh_auth="key"
+ssh_auth="password"
 ssh_password=""
 sudo_password=""
 auth_file=""
+secret_file=""
 
 cleanup() {
   rm -f -- "${secret_file:-}" "${auth_file:-}"
   unset gitlab_token ssh_password sudo_password
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-if [[ -f "$HOME/.ssh/id_rsa" ]] &&
-   ssh -i "$HOME/.ssh/id_rsa" \
-       -o IdentitiesOnly=yes \
-       -o BatchMode=yes \
-       -o ConnectTimeout=8 \
-       "$ssh_target" true; then
-  echo "SSH key berhasil."
-  read -r -s -p "Password sudo untuk $ssh_user: " sudo_password
-  echo
+if [[ -f "$ssh_key_path" && -r "$ssh_key_path" ]]; then
+  echo "Memeriksa SSH menggunakan key: $ssh_key_path"
+
+  if ssh -i "$ssh_key_path" \
+      -o IdentitiesOnly=yes \
+      -o BatchMode=yes \
+      -o ConnectTimeout=8 \
+      "$ssh_target" true; then
+    ssh_auth="key"
+    echo "SSH key berhasil."
+    read -r -s -p "Password sudo untuk $ssh_user: " sudo_password
+    echo
+  else
+    echo "SSH key gagal digunakan; beralih ke password SSH."
+  fi
 else
-  echo "SSH key tidak berhasil; menggunakan password SSH."
+  echo "File SSH key tidak ditemukan atau tidak bisa dibaca: $ssh_key_path"
+  echo "Menggunakan autentikasi password SSH."
+fi
 
+if [[ "$ssh_auth" == "password" ]]; then
   if ! command -v sshpass >/dev/null 2>&1; then
     echo "ERROR: sshpass belum terpasang."
     echo "Debian/Ubuntu/Kali: sudo apt install sshpass"
@@ -160,18 +182,36 @@ else
   printf '%s\n' "$ssh_password" > "$auth_file"
 
   if ! sshpass -f "$auth_file" ssh \
-       -o PreferredAuthentications=password,keyboard-interactive \
-       -o PubkeyAuthentication=no \
-       -o ConnectTimeout=8 \
-       "$ssh_target" true; then
+      -o PreferredAuthentications=password,keyboard-interactive \
+      -o PubkeyAuthentication=no \
+      -o ConnectTimeout=8 \
+      "$ssh_target" true; then
     echo "ERROR: Login SSH gagal."
     exit 1
   fi
 
-  ssh_auth="password"
   sudo_password="$ssh_password"
   echo "Login SSH berhasil."
 fi
+
+# Tulis inventory setelah metode autentikasi diketahui.
+cat > "$INVENTORY" <<INVENTORY_EOF
+---
+all:
+  children:
+    gitlab_runners:
+      hosts:
+        runner01:
+          ansible_host: "$server"
+          ansible_user: "$ssh_user"
+INVENTORY_EOF
+
+if [[ "$ssh_auth" == "key" ]]; then
+  printf '          ansible_ssh_private_key_file: "%s"\n' \
+    "$ssh_key_path" >> "$INVENTORY"
+fi
+
+chmod 600 "$INVENTORY"
 
 [[ -n "$sudo_password" ]] || {
   echo "ERROR: Password sudo tidak boleh kosong."

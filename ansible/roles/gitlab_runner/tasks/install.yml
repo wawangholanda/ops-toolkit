@@ -8,7 +8,11 @@
     update_cache: true
     cache_valid_time: 3600
 
-- name: Install Docker Engine
+- name: Gather installed package facts for Docker detection
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Install Docker Engine when no supported Docker package is installed
   ansible.builtin.apt:
     name: "{{ gitlab_runner_docker_package }}"
     state: present
@@ -17,6 +21,8 @@
   when:
     - gitlab_runner_executor == 'docker'
     - gitlab_runner_install_docker | bool
+    - "'docker-ce' not in ansible_facts.packages"
+    - "'docker.io' not in ansible_facts.packages"
 
 - name: Enable and start Docker service
   ansible.builtin.service:

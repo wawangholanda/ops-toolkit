@@ -2,9 +2,9 @@
 - name: Verify supported operating system family
   ansible.builtin.assert:
     that:
-      - ansible_os_family in gitlab_runner_supported_os_families
+      - ansible_facts["os_family"] in gitlab_runner_supported_os_families
     fail_msg: >-
-      Unsupported OS family '{{ ansible_os_family }}'.
+      Unsupported OS family '{{ ansible_facts["os_family"] }}'.
       Supported families: {{ gitlab_runner_supported_os_families | join(', ') }}.
   tags:
     - always
@@ -12,12 +12,12 @@
 - name: Verify supported distribution and release
   ansible.builtin.assert:
     that:
-      - ansible_distribution in gitlab_runner_supported_distributions
-      - ansible_distribution_version in
-        gitlab_runner_supported_distributions[ansible_distribution]
+      - ansible_facts["distribution"] in gitlab_runner_supported_distributions
+      - ansible_facts["distribution_version"] in
+        gitlab_runner_supported_distributions[ansible_facts["distribution"]]
     fail_msg: >-
-      Unsupported target {{ ansible_distribution }}
-      {{ ansible_distribution_version }}.
+      Unsupported target {{ ansible_facts["distribution"] }}
+      {{ ansible_facts["distribution_version"] }}.
       Supported releases: Debian 12/13 and Ubuntu 22.04/24.04.
   tags:
     - always
