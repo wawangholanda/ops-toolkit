@@ -7,7 +7,6 @@ postgresql_refresh_source_sslmode: require
 postgresql_refresh_target_port: 5432
 postgresql_refresh_target_database: "{{ postgresql_refresh_source_database }}"
 postgresql_refresh_target_owner: postgres
-postgresql_refresh_client_version: "18"
 
 # Existing target databases are protected by default.
 postgresql_refresh_overwrite_target: false
