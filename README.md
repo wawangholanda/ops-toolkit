@@ -109,7 +109,7 @@ bash scripts/postgresql-refresh-dev.sh
 
 The refresh workflow:
 - Connects from the development host to the RDS source using PostgreSQL SSL (`sslmode=require` by default).
-- Installs the PostgreSQL 18 client as a temporary bootstrap tool, then discovers the actual RDS server major version using `SHOW server_version_num`.
+- Installs the PostgreSQL 18 client as a bootstrap tool, then discovers the actual RDS server major version using `SHOW server_version_num`.
 - Supports RDS PostgreSQL major versions 15, 16, 17, and 18. Unsupported versions stop before modifying the target database.
 - Automatically installs/prepares the matching PostgreSQL server and client major version on Development. Other installed PostgreSQL major versions are left in place; packages and clusters are not automatically uninstalled or deleted.
 - Checks source, target, and client major-version compatibility before dumping.
