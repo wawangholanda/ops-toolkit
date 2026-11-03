@@ -58,7 +58,7 @@
 - name: Remove stale Ops Toolkit managed remote pg_hba rules while listener is local
   ansible.builtin.lineinfile:
     path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/pg_hba.conf"
-    regexp: '^host\\s+.*# managed by ops-toolkit$'
+    regexp: '^host\s+.*# managed by ops-toolkit$'
     state: absent
     owner: postgres
     group: postgres
