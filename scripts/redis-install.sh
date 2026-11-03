@@ -55,8 +55,12 @@ fi
 
 read -r -p "Port Redis [6379]: " redis_port
 redis_port="${redis_port:-6379}"
-[[ "$redis_port" =~ ^[0-9]+$ ]] &&
-  (( redis_port >= 1 && redis_port <= 65535 )) || {
+[[ "$redis_port" =~ ^[0-9]+$ ]] || {
+  echo "ERROR: Port harus berupa angka antara 1 dan 65535."
+  exit 1
+}
+redis_port_num=$((10#$redis_port))
+(( redis_port_num >= 1 && redis_port_num <= 65535 )) || {
     echo "ERROR: Port harus berupa angka antara 1 dan 65535."
     exit 1
   }
