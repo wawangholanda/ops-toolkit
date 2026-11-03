@@ -100,7 +100,7 @@ The inventory must define hosts in the `postgresql_servers` group.
 
 ### PostgreSQL production-to-development refresh
 
-To refresh a development database from an AWS RDS PostgreSQL database, first install PostgreSQL on the development host with `scripts/postgresql-install.sh`. Then run:
+To refresh a development database from an AWS RDS PostgreSQL database, run this workflow directly; a separate PostgreSQL installation step is not required:
 
 ```bash
 source .venv/bin/activate
@@ -109,6 +109,9 @@ bash scripts/postgresql-refresh-dev.sh
 
 The refresh workflow:
 - Connects from the development host to the RDS source using PostgreSQL SSL (`sslmode=require` by default).
+- Installs the PostgreSQL 18 client as a temporary bootstrap tool, then discovers the actual RDS server major version using `SHOW server_version_num`.
+- Supports RDS PostgreSQL major versions 15, 16, 17, and 18. Unsupported versions stop before modifying the target database.
+- Automatically installs/prepares the matching PostgreSQL server and client major version on Development. Other installed PostgreSQL major versions are left in place; packages and clusters are not automatically uninstalled or deleted.
 - Checks source, target, and client major-version compatibility before dumping.
 - Creates a temporary custom-format dump on the development host, then restores it into the development database.
 - Uses `--no-owner` and `--no-acl`; restored objects are owned by the selected target database owner.
@@ -118,7 +121,7 @@ The refresh workflow:
 Before running:
 - Allow the development host's outbound connection to the RDS endpoint and allow its private/public egress IP in the RDS security group on the database port.
 - Ensure the RDS user can connect to the selected database and read all objects/data required by `pg_dump`.
-- Ensure the target PostgreSQL client major version is at least the source major version, and the target server major version is not older than the source. This workflow does not support major-version downgrades.
+- The requested target port must be free for the matching PostgreSQL cluster. If another PostgreSQL cluster already owns that port, the installer stops safely; choose another target port or resolve the conflict manually. Existing clusters and data are not automatically removed.
 - Install required PostgreSQL extensions on the development host before restoring. Extension availability and RDS-specific features should be checked separately.
 - The target database owner role must already exist on the development server.
 - The temporary dump contains production data. The temporary directory is restricted to the PostgreSQL OS account, but use encrypted storage and protect the development host appropriately.
