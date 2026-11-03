@@ -130,7 +130,7 @@ else
   }
   auth_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-ssh.XXXXXX")"
   chmod 600 "$auth_file"
-  printf '%s\\n' "$ssh_password" > "$auth_file"
+  printf '%s\n' "$ssh_password" > "$auth_file"
   if ! sshpass -f "$auth_file" ssh -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o ConnectTimeout=8 "$ssh_target" true; then
     echo "ERROR: Login SSH gagal."
     exit 1
@@ -159,10 +159,10 @@ INVENTORY_EOF
 
 secret_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-postgresql-vars.XXXXXX")"
 chmod 600 "$secret_file"
-printf '%s\\0%s\\0%s\\0%s' "$ssh_password" "$sudo_password" "$postgresql_port" "$postgresql_listen_addresses" |
+printf '%s\0%s\0%s\0%s' "$ssh_password" "$sudo_password" "$postgresql_port" "$postgresql_listen_addresses" |
 python -c '
 import json, sys
-ssh_password, sudo_password, port, listen = (v.decode() for v in sys.stdin.buffer.read().split(b"\\0"))
+ssh_password, sudo_password, port, listen = (v.decode() for v in sys.stdin.buffer.read().split(b"\0"))
 data = {
     "ansible_become_password": sudo_password,
     "postgresql_port": int(port),
@@ -172,7 +172,7 @@ if ssh_password:
     data["ansible_password"] = ssh_password
 with open(sys.argv[1], "w", encoding="utf-8") as f:
     json.dump(data, f)
-    f.write("\\n")
+    f.write("\n")
 ' "$secret_file"
 
 unset ssh_password sudo_password
