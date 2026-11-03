@@ -25,6 +25,17 @@
       identifiers; ports, client version, source credentials, and SSL mode must
       be valid.
 
+- name: Validate the supplied application CIDR and PostgreSQL bind address
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import ipaddress,sys; n=ipaddress.ip_network(sys.argv[1], strict=False); a=ipaddress.ip_address(sys.argv[2]); assert n.version == 4 and a.version == 4 and n.prefixlen > 0"
+      - "{{ postgresql_refresh_app_client_cidr }}"
+      - "{{ postgresql_refresh_listen_addresses }}"
+  changed_when: false
+  when: postgresql_refresh_app_client_cidr | length > 0
+
 - name: Verify supported target operating system
   ansible.builtin.assert:
     that:
@@ -275,9 +286,12 @@
           - "app_user={{ postgresql_refresh_app_username }}"
           - -v
           - "target_owner={{ postgresql_refresh_target_owner }}"
+          - -v
+          - "target_db={{ postgresql_refresh_target_database }}"
           - -d
           - "{{ postgresql_refresh_target_database }}"
         stdin: |
+          GRANT CONNECT ON DATABASE :"target_db" TO :"app_user";
           SELECT format('GRANT USAGE ON SCHEMA %I TO %I', nspname, :'app_user')
           FROM pg_namespace WHERE nspname <> 'information_schema' AND nspname NOT LIKE 'pg_%'
           \gexec
