@@ -8,6 +8,7 @@ This project starts with GitLab Runner lifecycle management, providing scripts t
 
 - **GitLab Runner Registration** — automate the runner registration workflow.
 - **GitLab Runner Unregistration** — simplify the runner unregistration workflow.
+- **Redis Installation** — install and configure Redis on Debian and Ubuntu hosts using Ansible.
 
 ## Requirements
 
@@ -28,6 +29,36 @@ cd ops-toolkit
 ```
 
 Review the scripts and their usage instructions before execution. Use the appropriate command-line options and configuration supported by each script.
+
+### Redis installation
+
+The Redis role targets Debian and Ubuntu systems using APT. It does not pin a fixed list of OS release numbers; actual compatibility depends on the target's Python version, the installed Ansible version, and the availability of APT repositories.
+
+Activate the project's Ansible virtual environment, then run:
+
+```bash
+source .venv/bin/activate
+bash scripts/redis-install.sh
+```
+
+The quick-start prompts for the target host, SSH user, Redis port, optional Redis password, and SSH authentication details. It uses a temporary inventory and a mode-0600 temporary variables file; both are removed when the script exits.
+
+Defaults:
+- Redis listens on `127.0.0.1:6379` only.
+- Protected mode remains enabled.
+- Redis starts now and is enabled at boot.
+- A Redis password is optional; supply one when the service needs authentication.
+- No reboot is performed.
+
+For advanced configuration, edit the Redis role variables in `ansible/roles/redis/defaults/main.yml` or pass overrides through a protected Ansible vars file. Do not commit passwords.
+
+The playbook can also be run directly:
+
+```bash
+ansible-playbook -i ansible/inventory/dev/hosts.yml ansible/playbooks/redis.yml
+```
+
+The inventory must define hosts in the `redis_servers` group.
 
 ## Security
 
