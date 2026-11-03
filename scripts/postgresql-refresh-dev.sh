@@ -152,7 +152,7 @@ echo "- Versi PostgreSQL lain yang sudah terpasang tidak akan dihapus otomatis."
 echo "- Server development harus dapat menjangkau endpoint RDS pada port $source_port."
 echo "- Security Group RDS harus mengizinkan koneksi dari server development."
 echo "- SSL RDS menggunakan sslmode=require."
-echo "- Restore menggunakan --no-owner dan --no-acl; object akan dimiliki target owner."
+echo "- Restore menggunakan --no-owner dan --no-acl; object dimiliki OS role postgres, sedangkan database dimiliki target owner."
 echo "- Pastikan extension yang dipakai production tersedia pada server development."
 echo
 read -r -p "Database development sudah ada? Timpa database tersebut? Ketik REPLACE untuk mengizinkan: " overwrite_confirm
