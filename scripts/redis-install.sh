@@ -66,16 +66,44 @@ redis_port_num=$((10#$redis_port))
   }
 
 echo
-echo "Redis akan bind ke 127.0.0.1 (localhost) secara default."
-echo "Password bersifat opsional; untuk akses remote, ubah bind/firewall"
-echo "secara terencana dan jangan mengekspos Redis langsung ke Internet."
+echo "Pilih IP address tempat Redis akan listen:"
+echo "  1) 127.0.0.1  - localhost saja (default, paling aman)"
+echo "  2) Private IP  - IP interface server untuk jaringan internal"
+echo "  3) Custom IP   - masukkan alamat IPv4 tertentu"
+echo "  4) 0.0.0.0    - semua interface (berisiko; amankan firewall)"
+read -r -p "Pilihan [1]: " bind_choice
+bind_choice="${bind_choice:-1}"
+
+case "$bind_choice" in
+  1) redis_bind_address="127.0.0.1" ;;
+  2) read -r -p "Masukkan private IP server: " redis_bind_address ;;
+  3) read -r -p "Masukkan custom IPv4 address: " redis_bind_address ;;
+  4)
+    redis_bind_address="0.0.0.0"
+    echo "PERINGATAN: Redis akan listen pada semua interface."
+    echo "Pastikan firewall hanya mengizinkan sumber yang tepercaya."
+    ;;
+  *)
+    echo "ERROR: Pilihan tidak valid."
+    exit 1
+    ;;
+esac
+
+if [[ "$redis_bind_address" != "0.0.0.0" ]] &&
+   ! python -c 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "$redis_bind_address" 2>/dev/null; then
+  echo "ERROR: IP address tidak valid."
+  exit 1
+fi
+
+echo "Password bersifat opsional. Untuk akses remote, gunakan autentikasi"
+echo "dan firewall; jangan mengekspos Redis langsung ke Internet."
 read -r -s -p "Password Redis (kosong = tanpa password): " redis_password
 echo
 
 echo
 echo "Target       : $ssh_user@$server"
 echo "Redis port   : $redis_port"
-echo "Bind address : 127.0.0.1"
+echo "Bind address : $redis_bind_address"
 echo "Authentication: $([[ -n "$redis_password" ]] && echo enabled || echo disabled)"
 read -r -p "Lanjutkan? [y/N] " confirm
 [[ "$confirm" =~ ^[Yy]$ ]] || {
@@ -160,16 +188,17 @@ secret_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-redis-vars.XXXXXX")"
 chmod 600 "$secret_file"
 
 # Pass secrets to Python over stdin, not as command-line arguments or env vars.
-printf '%s\0%s\0%s\0%s' \
-  "$ssh_password" "$sudo_password" "$redis_password" "$redis_port" |
+printf '%s\0%s\0%s\0%s\0%s' \
+  "$ssh_password" "$sudo_password" "$redis_password" "$redis_port" "$redis_bind_address" |
 python -c '
 import json, sys
-ssh_password, sudo_password, redis_password, redis_port = (
+ssh_password, sudo_password, redis_password, redis_port, redis_bind_address = (
     value.decode() for value in sys.stdin.buffer.read().split(b"\0")
 )
 data = {
     "ansible_become_password": sudo_password,
     "redis_port": int(redis_port),
+    "redis_bind_address": redis_bind_address,
     "redis_password": redis_password,
 }
 if ssh_password:
