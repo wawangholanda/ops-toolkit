@@ -152,7 +152,7 @@
       - -d
       - postgres
       - -c
-      - "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{{ postgresql_refresh_app_username }}') THEN CASE WHEN (SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls FROM pg_roles WHERE rolname = '{{ postgresql_refresh_app_username }}') OR pg_has_role('{{ postgresql_refresh_app_username }}', '{{ postgresql_refresh_target_owner }}', 'MEMBER') THEN '1' ELSE '0' END ELSE '0' END;"
+      - "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{{ postgresql_refresh_app_username }}') THEN CASE WHEN EXISTS (SELECT 1 FROM pg_roles r JOIN pg_authid a ON a.oid = r.oid WHERE r.rolname = '{{ postgresql_refresh_app_username }}' AND (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls OR a.rolpassword NOT LIKE 'SCRAM-SHA-256$%')) OR pg_has_role('{{ postgresql_refresh_app_username }}', '{{ postgresql_refresh_target_owner }}', 'MEMBER') THEN '1' ELSE '0' END ELSE '0' END;"
   register: postgresql_refresh_app_role_privileges
   changed_when: false
 
@@ -161,7 +161,7 @@
     that:
       - postgresql_refresh_app_role_privileges.stdout | trim == '0'
     fail_msg: >-
-      The existing application role has elevated PostgreSQL privileges.
+      The existing application role is privileged, has no SCRAM password, or inherits database-owner privileges.
       Use a dedicated non-superuser login role; the target database has not
       been modified.
 
@@ -301,6 +301,7 @@
           - -d
           - postgres
         stdin: |
+          SET password_encryption = 'scram-sha-256';
           \getenv app_password POSTGRESQL_REFRESH_APP_PASSWORD
           SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'app_user', :'app_password')
           WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user')
