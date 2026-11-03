@@ -96,8 +96,8 @@
 
 - name: Extract selected PostgreSQL main cluster version
   ansible.builtin.set_fact:
-    postgresql_cluster_version: "{{ (postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\\s+main\\s+') | list | first).split()[0] }}"
-  when: postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\\s+main\\s+') | list | length > 0
+    postgresql_cluster_version: "{{ (postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\s+main\s+') | list | first).split()[0] }}"
+  when: postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\s+main\s+') | list | length > 0
 
 - name: Verify selected PostgreSQL main cluster exists
   ansible.builtin.assert:
@@ -106,6 +106,18 @@
     fail_msg: >-
       No PostgreSQL {{ postgresql_version }} 'main' cluster was found.
       Inspect pg_lsclusters and the package installation output.
+
+- name: Ensure requested PostgreSQL port is not used by another cluster
+  ansible.builtin.assert:
+    that:
+      - >-
+        postgresql_clusters.stdout_lines
+        | reject('match', '^' ~ (postgresql_version | string) ~ '\s+main\s+')
+        | select('search', '\s' ~ (postgresql_port | string) ~ '\s')
+        | list | length == 0
+    fail_msg: >-
+      Port {{ postgresql_port }} is already assigned to another PostgreSQL cluster.
+      Choose a free port or inspect pg_lsclusters before continuing.
 
 - name: Configure PostgreSQL listen addresses
   ansible.builtin.lineinfile:
@@ -148,8 +160,6 @@
     argv:
       - psql
       - -XAt
-      - -h
-      - "{{ '127.0.0.1' if postgresql_listen_addresses in ['localhost', '*'] else postgresql_listen_addresses }}"
       - -p
       - "{{ postgresql_port | string }}"
       - -d
