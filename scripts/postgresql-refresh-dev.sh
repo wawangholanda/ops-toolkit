@@ -67,6 +67,9 @@ target_owner="${target_owner:-postgres}"
 read -r -p "Username application Development: " app_username
 read -r -s -p "Password application Development (minimal 16 karakter): " app_password
 echo
+read -r -p "PostgreSQL listen address [localhost; isi IP server jika remote]: " listen_address
+listen_address="${listen_address:-localhost}"
+read -r -p "CIDR sumber aplikasi (kosong = hanya akses lokal): " app_client_cidr
 
 [[ -n "$source_host" && -n "$source_username" && -n "$source_password" &&
    -n "$target_server" && -n "$ssh_user" && -n "$app_username" && -n "$app_password" ]] || {
@@ -93,6 +96,29 @@ valid_identifier "$app_username" || {
   echo "ERROR: Password application minimal 16 karakter."
   exit 1
 }
+if [[ -n "$app_client_cidr" ]]; then
+  python - "$app_client_cidr" "$listen_address" <<'PY'
+import ipaddress
+import sys
+try:
+    network = ipaddress.ip_network(sys.argv[1], strict=False)
+    address = ipaddress.ip_address(sys.argv[2])
+    if network.version != 4 or address.version != 4:
+        raise ValueError("IPv4 only")
+except ValueError:
+    print("ERROR: CIDR dan listen address harus IPv4 yang valid.")
+    raise SystemExit(1)
+PY
+  [[ "$listen_address" != "localhost" && "$listen_address" != "*" ]] || {
+    echo "ERROR: Untuk akses remote, masukkan IP interface server, bukan localhost atau *."
+    exit 1
+  }
+else
+  [[ "$listen_address" == "localhost" ]] || {
+    echo "ERROR: Listen address non-local membutuhkan CIDR sumber aplikasi."
+    exit 1
+  }
+fi
 [[ "$app_username" != "$target_owner" ]] || {
   echo "ERROR: Application user harus berbeda dari database owner agar hak aksesnya tetap terpisah."
   exit 1
@@ -114,7 +140,9 @@ echo "  Source : $source_database @ $source_host:$source_port (RDS)"
 echo "  Target : $target_database @ $target_server:$target_port"
 echo "  Owner  : $target_owner"
 echo "  App user: $app_username"
-echo "  App password: akan digunakan hanya jika role belum ada; password role existing tidak diubah."
+echo "  App network: ${app_client_cidr:-local only}"
+echo "  Listen address: $listen_address"
+echo "  App password: hanya digunakan jika role belum ada; password role existing tidak diubah."
 echo
 echo "Catatan:"
 echo "- Versi RDS akan dideteksi otomatis; PostgreSQL server/client yang sesuai akan disiapkan pada Development."
@@ -197,17 +225,17 @@ INVENTORY_EOF
 
 secret_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-pg-refresh-vars.XXXXXX")"
 chmod 600 "$secret_file"
-printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s' \
+printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s' \\
   "$ssh_password" "$sudo_password" "$source_host" "$source_port" \
   "$source_database" "$source_username" "$source_password" \
   "$target_port" "$target_database" "$target_owner" "$overwrite_target" \
-  "$app_username" "$app_password" |
+  "$app_username" "$app_password" "$listen_address" "$app_client_cidr" |
 python -c '
 import json, sys
 values = [v.decode() for v in sys.stdin.buffer.read().split(b"\0")]
 (ssh_password, sudo_password, source_host, source_port, source_db,
  source_user, source_password, target_port, target_db, target_owner,
- overwrite_target, app_username, app_password) = values
+ overwrite_target, app_username, app_password, listen_address, app_client_cidr) = values
 data = {
     "ansible_become_password": sudo_password,
     "postgresql_refresh_source_host": source_host,
@@ -221,6 +249,8 @@ data = {
     "postgresql_refresh_overwrite_target": overwrite_target == "true",
     "postgresql_refresh_app_username": app_username,
     "postgresql_refresh_app_password": app_password,
+    "postgresql_refresh_listen_addresses": listen_address,
+    "postgresql_refresh_app_client_cidr": app_client_cidr,
 }
 if ssh_password:
     data["ansible_password"] = ssh_password
