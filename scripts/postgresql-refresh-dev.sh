@@ -60,8 +60,6 @@ read -r -p "IP/hostname server PostgreSQL development: " target_server
 read -r -p "Username SSH server development: " ssh_user
 read -r -p "Port PostgreSQL development [5432]: " target_port
 target_port="${target_port:-5432}"
-read -r -p "Major version PostgreSQL client yang terpasang [18]: " client_version
-client_version="${client_version:-18}"
 read -r -p "Nama database development [${source_database}]: " target_database
 target_database="${target_database:-$source_database}"
 read -r -p "Owner database development [postgres]: " target_owner
@@ -88,10 +86,6 @@ valid_port "$source_port" && valid_port "$target_port" || {
   echo "ERROR: Port harus berupa angka antara 1 dan 65535."
   exit 1
 }
-[[ "$client_version" =~ ^(15|16|17|18)$ ]] || {
-  echo "ERROR: Client version yang didukung: 15, 16, 17, atau 18."
-  exit 1
-}
 if [[ ! "$source_host" =~ ^[a-zA-Z0-9.-]+$ ||
       ! "$target_server" =~ ^[a-zA-Z0-9._:-]+$ ||
       ! "$ssh_user" =~ ^[a-zA-Z0-9._-]+$ ]]; then
@@ -103,11 +97,11 @@ echo
 echo "Ringkasan:"
 echo "  Source : $source_database @ $source_host:$source_port (RDS)"
 echo "  Target : $target_database @ $target_server:$target_port"
-echo "  Client : PostgreSQL $client_version"
 echo "  Owner  : $target_owner"
 echo
 echo "Catatan:"
-echo "- Server development harus sudah dipasangi PostgreSQL dan client version $client_version."
+echo "- Versi RDS akan dideteksi otomatis; PostgreSQL server/client yang sesuai akan disiapkan pada Development."
+echo "- Versi PostgreSQL lain yang sudah terpasang tidak akan dihapus otomatis."
 echo "- Server development harus dapat menjangkau endpoint RDS pada port $source_port."
 echo "- Security Group RDS harus mengizinkan koneksi dari server development."
 echo "- SSL RDS menggunakan sslmode=require."
@@ -189,13 +183,12 @@ chmod 600 "$secret_file"
 printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s' \
   "$ssh_password" "$sudo_password" "$source_host" "$source_port" \
   "$source_database" "$source_username" "$source_password" \
-  "$target_port" "$client_version" "$target_database" "$target_owner" "$overwrite_target" |
+  "$target_port" "$target_database" "$target_owner" "$overwrite_target" |
 python -c '
 import json, sys
 values = [v.decode() for v in sys.stdin.buffer.read().split(b"\0")]
 (ssh_password, sudo_password, source_host, source_port, source_db,
- source_user, source_password, target_port, client_version, target_db,
- target_owner, overwrite_target) = values
+ source_user, source_password, target_port, target_db, target_owner, overwrite_target) = values
 data = {
     "ansible_become_password": sudo_password,
     "postgresql_refresh_source_host": source_host,
@@ -204,7 +197,6 @@ data = {
     "postgresql_refresh_source_username": source_user,
     "postgresql_refresh_source_password": source_password,
     "postgresql_refresh_target_port": int(target_port),
-    "postgresql_refresh_client_version": client_version,
     "postgresql_refresh_target_database": target_db,
     "postgresql_refresh_target_owner": target_owner,
     "postgresql_refresh_overwrite_target": overwrite_target == "true",
