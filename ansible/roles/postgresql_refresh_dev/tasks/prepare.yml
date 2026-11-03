@@ -62,7 +62,6 @@
     update_cache: true
 
 - name: Discover PostgreSQL server version on production RDS
-  become_user: postgres
   ansible.builtin.command:
     argv:
       - /usr/lib/postgresql/18/bin/psql
