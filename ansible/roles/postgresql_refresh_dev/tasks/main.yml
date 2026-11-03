@@ -36,6 +36,15 @@
   changed_when: false
   when: postgresql_refresh_app_client_cidr | length > 0
 
+- name: Ensure the requested PostgreSQL bind IP is assigned to the development host
+  ansible.builtin.assert:
+    that:
+      - postgresql_refresh_listen_addresses in ansible_all_ipv4_addresses
+    fail_msg: >-
+      The requested PostgreSQL listen address is not assigned to this server.
+      Use a private interface IP configured on the development host.
+  when: postgresql_refresh_app_client_cidr | length > 0
+
 - name: Verify supported target operating system
   ansible.builtin.assert:
     that:
