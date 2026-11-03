@@ -116,8 +116,8 @@ The refresh workflow:
 - Creates a temporary custom-format dump on the development host, then restores it into the development database.
 - Uses `--no-owner` and `--no-acl`; restored objects are owned by the PostgreSQL restore account, while the database itself is owned by the selected target database owner.
 - Prompts for a separate Development application username and password. If the role does not exist, it is created as a login role; if it already exists, its password is preserved.
-- Grants the application role `USAGE` on every non-system schema, CRUD access to existing tables, and sequence access. Default privileges are configured for objects created by the PostgreSQL restore account and the selected database owner.
-- Keeps PostgreSQL bound to `localhost` by default. For remote application access, optionally enter the server's private interface IP and the application's trusted IPv4 CIDR; the workflow binds PostgreSQL to that IP and adds a database/user/CIDR-specific `scram-sha-256` rule to `pg_hba.conf`.
+- Grants the application role `USAGE` on every non-system schema, CRUD access to existing tables, and sequence access. Default privileges are configured for objects created by the PostgreSQL restore account and the selected database owner. This is a runtime application role; use a separate migration/owner account for schema changes that require `CREATE` privileges.
+- Keeps PostgreSQL bound to `localhost` by default. For remote application access, optionally enter the server's private interface IP and the application's trusted IPv4 CIDR; the workflow first keeps PostgreSQL local during the restore, then binds it to that IP and adds a database/user/CIDR-specific `scram-sha-256` rule to `pg_hba.conf`. Previously managed remote rules are removed before each refresh so a changed or omitted CIDR does not leave an old managed rule behind.
 - Removes the temporary dump directory after the workflow, including when a task fails.
 - Never changes the RDS source, application endpoints, or production infrastructure.
 
