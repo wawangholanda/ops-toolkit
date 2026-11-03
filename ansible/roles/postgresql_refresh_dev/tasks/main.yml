@@ -1,0 +1,235 @@
+---
+- name: Validate refresh inputs
+  ansible.builtin.assert:
+    that:
+      - postgresql_refresh_source_host | length > 0
+      - postgresql_refresh_source_database is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_source_username | length > 0
+      - postgresql_refresh_source_password | length > 0
+      - postgresql_refresh_target_database is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_target_owner is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_source_port | int >= 1
+      - postgresql_refresh_source_port | int <= 65535
+      - postgresql_refresh_target_port | int >= 1
+      - postgresql_refresh_target_port | int <= 65535
+      - postgresql_refresh_client_version | string is match('^(15|16|17|18)$')
+      - postgresql_refresh_source_sslmode in ['require', 'verify-ca', 'verify-full']
+    fail_msg: >-
+      Invalid refresh input. Database and role names must use simple PostgreSQL
+      identifiers; ports, client version, source credentials, and SSL mode must
+      be valid.
+
+- name: Verify supported target operating system
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == "Debian"
+      - ansible_distribution in ["Debian", "Ubuntu"]
+    fail_msg: "The refresh role currently supports Debian and Ubuntu targets."
+
+- name: Verify PostgreSQL client binaries exist
+  ansible.builtin.stat:
+    path: "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/{{ item }}"
+  loop:
+    - psql
+    - pg_dump
+    - pg_restore
+  register: postgresql_refresh_client_binaries
+
+- name: Require PostgreSQL client binaries
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.executable
+    fail_msg: >-
+      Required PostgreSQL {{ postgresql_refresh_client_version }} client binary
+      is missing: {{ item.stat.path }}. Install PostgreSQL client packages first.
+  loop: "{{ postgresql_refresh_client_binaries.results }}"
+
+- name: Check source RDS connectivity and read its server version
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/psql"
+      - -XAt
+      - -v
+      - ON_ERROR_STOP=1
+      - -h
+      - "{{ postgresql_refresh_source_host }}"
+      - -p
+      - "{{ postgresql_refresh_source_port | string }}"
+      - -U
+      - "{{ postgresql_refresh_source_username }}"
+      - -d
+      - "{{ postgresql_refresh_source_database }}"
+      - -c
+      - "SHOW server_version_num;"
+  environment:
+    PGPASSWORD: "{{ postgresql_refresh_source_password }}"
+    PGSSLMODE: "{{ postgresql_refresh_source_sslmode }}"
+    PGCONNECT_TIMEOUT: "10"
+  register: postgresql_refresh_source_version_num
+  changed_when: false
+  no_log: true
+
+- name: Read target PostgreSQL server version
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/psql"
+      - -XAt
+      - -v
+      - ON_ERROR_STOP=1
+      - -p
+      - "{{ postgresql_refresh_target_port | string }}"
+      - -d
+      - postgres
+      - -c
+      - "SHOW server_version_num;"
+  register: postgresql_refresh_target_version_num
+  changed_when: false
+
+- name: Validate PostgreSQL major-version compatibility
+  ansible.builtin.assert:
+    that:
+      - (postgresql_refresh_source_version_num.stdout | int // 10000) <= (postgresql_refresh_client_version | int)
+      - (postgresql_refresh_source_version_num.stdout | int // 10000) <= (postgresql_refresh_target_version_num.stdout | int // 10000)
+    fail_msg: >-
+      The source major version must not be newer than the installed pg_dump
+      client or the target PostgreSQL server. Source server version number:
+      {{ postgresql_refresh_source_version_num.stdout }}; target server version
+      number: {{ postgresql_refresh_target_version_num.stdout }}; client major:
+      {{ postgresql_refresh_client_version }}. PostgreSQL major-version
+      downgrades are not supported by this workflow.
+
+- name: Check whether target database already exists
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/psql"
+      - -XAt
+      - -v
+      - ON_ERROR_STOP=1
+      - -p
+      - "{{ postgresql_refresh_target_port | string }}"
+      - -d
+      - postgres
+      - -c
+      - "SELECT 1 FROM pg_database WHERE datname = '{{ postgresql_refresh_target_database }}';"
+  register: postgresql_refresh_target_exists
+  changed_when: false
+
+- name: Protect an existing development database by default
+  ansible.builtin.assert:
+    that:
+      - postgresql_refresh_target_exists.stdout | trim != '1' or postgresql_refresh_overwrite_target | bool
+    fail_msg: >-
+      Target database {{ postgresql_refresh_target_database }} already exists.
+      Set postgresql_refresh_overwrite_target=true only when you intend to
+      replace its contents. The source database is never modified.
+
+- name: Create a private temporary directory for the dump
+  ansible.builtin.tempfile:
+    state: directory
+    path: "{{ postgresql_refresh_temp_parent }}"
+    prefix: ops-toolkit-pg-refresh-
+  register: postgresql_refresh_temp_dir
+
+- name: Secure temporary dump directory
+  ansible.builtin.file:
+    path: "{{ postgresql_refresh_temp_dir.path }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+
+- name: Refresh development database
+  block:
+    - name: Drop existing target database when explicit overwrite is enabled
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/dropdb"
+          - --if-exists
+          - --force
+          - -p
+          - "{{ postgresql_refresh_target_port | string }}"
+          - "{{ postgresql_refresh_target_database }}"
+      when:
+        - postgresql_refresh_target_exists.stdout | trim == '1'
+        - postgresql_refresh_overwrite_target | bool
+
+    - name: Create target development database
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/createdb"
+          - -p
+          - "{{ postgresql_refresh_target_port | string }}"
+          - -O
+          - "{{ postgresql_refresh_target_owner }}"
+          - "{{ postgresql_refresh_target_database }}"
+
+    - name: Dump production database from RDS in custom format
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/pg_dump"
+          - --no-password
+          - --format=custom
+          - --file
+          - "{{ postgresql_refresh_temp_dir.path }}/production.dump"
+          - -h
+          - "{{ postgresql_refresh_source_host }}"
+          - -p
+          - "{{ postgresql_refresh_source_port | string }}"
+          - -U
+          - "{{ postgresql_refresh_source_username }}"
+          - -d
+          - "{{ postgresql_refresh_source_database }}"
+      environment:
+        PGPASSWORD: "{{ postgresql_refresh_source_password }}"
+        PGSSLMODE: "{{ postgresql_refresh_source_sslmode }}"
+        PGCONNECT_TIMEOUT: "10"
+      no_log: true
+
+    - name: Restore production dump into development database
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/pg_restore"
+          - --exit-on-error
+          - --no-owner
+          - --no-acl
+          - --dbname
+          - "{{ postgresql_refresh_target_database }}"
+          - -p
+          - "{{ postgresql_refresh_target_port | string }}"
+          - "{{ postgresql_refresh_temp_dir.path }}/production.dump"
+
+    - name: Verify restored database is connectable
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/psql"
+          - -XAt
+          - -v
+          - ON_ERROR_STOP=1
+          - -p
+          - "{{ postgresql_refresh_target_port | string }}"
+          - -d
+          - "{{ postgresql_refresh_target_database }}"
+          - -c
+          - "SELECT current_database(), current_user;"
+      register: postgresql_refresh_restore_check
+      changed_when: false
+
+    - name: Report successful development database refresh
+      ansible.builtin.debug:
+        msg: >-
+          Development database {{ postgresql_refresh_target_database }} was
+          restored and connection-checked. Production source was not modified.
+  always:
+    - name: Remove temporary production dump and working directory
+      ansible.builtin.file:
+        path: "{{ postgresql_refresh_temp_dir.path }}"
+        state: absent
