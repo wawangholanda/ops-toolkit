@@ -1,0 +1,134 @@
+---
+- name: Install PGDG repository prerequisites for version discovery
+  ansible.builtin.apt:
+    name: [ca-certificates, gnupg]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create PGDG keyring directory
+  ansible.builtin.file:
+    path: /usr/share/postgresql-common/pgdg
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download official PostgreSQL repository signing key
+  ansible.builtin.get_url:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    dest: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Verify official PGDG repository signing key fingerprint
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --show-keys
+      - --with-colons
+      - /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+  register: postgresql_refresh_pgdg_key
+  changed_when: false
+  failed_when: >-
+    postgresql_refresh_pgdg_key.rc != 0 or
+    'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8' not in postgresql_refresh_pgdg_key.stdout
+
+- name: Detect APT architecture for PGDG
+  ansible.builtin.command:
+    argv: [dpkg, --print-architecture]
+  register: postgresql_refresh_apt_architecture
+  changed_when: false
+
+- name: Configure official PGDG APT repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/pgdg.sources
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: https://apt.postgresql.org/pub/repos/apt
+      Suites: {{ ansible_distribution_release }}-pgdg
+      Architectures: {{ postgresql_refresh_apt_architecture.stdout }}
+      Components: main
+      Signed-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+
+- name: Install PostgreSQL 18 client as a temporary discovery tool
+  ansible.builtin.apt:
+    name: postgresql-client-18
+    state: present
+    update_cache: true
+
+- name: Discover PostgreSQL server version on production RDS
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - /usr/lib/postgresql/18/bin/psql
+      - -XAt
+      - -v
+      - ON_ERROR_STOP=1
+      - -h
+      - "{{ postgresql_refresh_source_host }}"
+      - -p
+      - "{{ postgresql_refresh_source_port | string }}"
+      - -U
+      - "{{ postgresql_refresh_source_username }}"
+      - -d
+      - "{{ postgresql_refresh_source_database }}"
+      - -c
+      - "SHOW server_version_num;"
+  environment:
+    PGPASSWORD: "{{ postgresql_refresh_source_password }}"
+    PGSSLMODE: "{{ postgresql_refresh_source_sslmode }}"
+    PGCONNECT_TIMEOUT: "10"
+  register: postgresql_refresh_discovered_version_num
+  changed_when: false
+  no_log: true
+
+- name: Derive RDS PostgreSQL major version
+  ansible.builtin.set_fact:
+    postgresql_refresh_detected_major: "{{ (postgresql_refresh_discovered_version_num.stdout | int // 10000) | string }}"
+
+- name: Ensure discovered RDS major version is supported
+  ansible.builtin.assert:
+    that:
+      - postgresql_refresh_detected_major in ['15', '16', '17', '18']
+    fail_msg: >-
+      RDS reports PostgreSQL major {{ postgresql_refresh_detected_major }},
+      which is not supported. Supported major versions: 15, 16, 17, and 18.
+      No target database has been changed.
+
+- name: Select matching client major version automatically
+  ansible.builtin.set_fact:
+    postgresql_refresh_client_version: "{{ postgresql_refresh_detected_major }}"
+
+- name: Report discovered RDS version
+  ansible.builtin.debug:
+    msg: "Production RDS reports PostgreSQL {{ postgresql_refresh_detected_major }}. Preparing the same major version on Development."
+
+- name: Install or prepare matching PostgreSQL server without removing other majors
+  ansible.builtin.include_role:
+    name: postgresql
+  vars:
+    postgresql_version: "{{ postgresql_refresh_detected_major }}"
+    postgresql_port: "{{ postgresql_refresh_target_port }}"
+    postgresql_listen_addresses: localhost
+    postgresql_package_state: present
+    postgresql_service_enabled: true
+    postgresql_service_state: started
+
+- name: Verify matching PostgreSQL client binaries are available
+  ansible.builtin.stat:
+    path: "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/{{ item }}"
+  loop: [psql, pg_dump, pg_restore]
+  register: postgresql_refresh_client_binaries
+
+- name: Require matching PostgreSQL client binaries
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.executable
+    fail_msg: "Required PostgreSQL {{ postgresql_refresh_client_version }} client binary is missing: {{ item.stat.path }}"
+  loop: "{{ postgresql_refresh_client_binaries.results }}"
