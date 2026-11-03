@@ -197,7 +197,7 @@ INVENTORY_EOF
 
 secret_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-pg-refresh-vars.XXXXXX")"
 chmod 600 "$secret_file"
-printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0' \\
+printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s' \
   "$ssh_password" "$sudo_password" "$source_host" "$source_port" \
   "$source_database" "$source_username" "$source_password" \
   "$target_port" "$target_database" "$target_owner" "$overwrite_target" \
