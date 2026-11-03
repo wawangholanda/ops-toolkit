@@ -8,6 +8,10 @@ postgresql_refresh_target_port: 5432
 postgresql_refresh_target_database: "{{ postgresql_refresh_source_database }}"
 postgresql_refresh_target_owner: postgres
 
+# Separate non-superuser login for the development application.
+postgresql_refresh_app_username: ""
+postgresql_refresh_app_password: ""
+
 # Existing target databases are protected by default.
 postgresql_refresh_overwrite_target: false
 
