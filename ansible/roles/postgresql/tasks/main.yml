@@ -36,6 +36,7 @@
   ansible.builtin.apt:
     name:
       - ca-certificates
+      - gnupg
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -55,6 +56,19 @@
     owner: root
     group: root
     mode: "0644"
+
+- name: Verify official PGDG repository signing key fingerprint
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --show-keys
+      - --with-colons
+      - /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+  register: postgresql_pgdg_key
+  changed_when: false
+  failed_when: >-
+    postgresql_pgdg_key.rc != 0 or
+    'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8' not in postgresql_pgdg_key.stdout
 
 - name: Detect APT architecture
   ansible.builtin.command:
