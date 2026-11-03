@@ -66,7 +66,9 @@ The inventory must define hosts in the `redis_servers` group.
 
 ### PostgreSQL installation
 
-The PostgreSQL role installs the distribution-supported packages from the configured APT repositories. It does not pin a PostgreSQL major version; the installed version depends on the target OS repositories.
+The PostgreSQL role installs a specifically selected major version from the official PostgreSQL Global Development Group (PGDG) APT repository. The quick-start currently offers PostgreSQL 15, 16, 17, and 18, with 18 as the default. Versioned packages are used (for example, `postgresql-18` and `postgresql-client-18`) rather than the moving `postgresql` meta-package.
+
+PGDG repository setup follows the official PostgreSQL instructions and uses the repository signing key with APT's `Signed-By` option. Repository availability depends on the target Debian/Ubuntu release and CPU architecture; check the [official Debian](https://www.postgresql.org/download/linux/debian/) and [Ubuntu](https://www.postgresql.org/download/linux/ubuntu/) support lists before deployment.
 
 Activate the project's Ansible virtual environment, then run:
 
@@ -75,13 +77,13 @@ source .venv/bin/activate
 bash scripts/postgresql-install.sh
 ```
 
-The quick-start prompts for the target host, SSH user, PostgreSQL port, listen address, and SSH authentication details. It creates temporary inventory and mode-0600 variables files and removes them on exit.
+The quick-start prompts for the target host, SSH user, PostgreSQL major version, port, listen address, and SSH authentication details. It creates temporary inventory and mode-0600 variables files and removes them on exit.
 
 Defaults:
 - PostgreSQL listens on `localhost:5432` (local connections only).
 - You can select localhost, a private server IP, a custom IPv4 address, or `*` (all interfaces).
 - A selected specific IPv4 address must already be assigned to the target host.
-- The role enables and starts the PostgreSQL service and verifies readiness with `pg_isready`.
+- The role configures the selected major version's `main` cluster, enables and starts PostgreSQL, and verifies readiness plus the responding server major version.
 - No database user or password is created, no `pg_hba.conf` rules are modified, and no reboot is performed.
 
 **Important:** changing `listen_addresses` alone does not grant remote database access. Remote clients also need an intentional `pg_hba.conf` rule, appropriate authentication, and a firewall rule restricted to trusted source addresses. Do not expose PostgreSQL directly to the Internet.
