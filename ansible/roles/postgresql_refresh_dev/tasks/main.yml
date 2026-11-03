@@ -12,7 +12,6 @@
       - postgresql_refresh_source_port | int <= 65535
       - postgresql_refresh_target_port | int >= 1
       - postgresql_refresh_target_port | int <= 65535
-      - postgresql_refresh_client_version | string is match('^(15|16|17|18)$')
       - postgresql_refresh_source_sslmode in ['require', 'verify-ca', 'verify-full']
     fail_msg: >-
       Invalid refresh input. Database and role names must use simple PostgreSQL
@@ -26,24 +25,8 @@
       - ansible_distribution in ["Debian", "Ubuntu"]
     fail_msg: "The refresh role currently supports Debian and Ubuntu targets."
 
-- name: Verify PostgreSQL client binaries exist
-  ansible.builtin.stat:
-    path: "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/{{ item }}"
-  loop:
-    - psql
-    - pg_dump
-    - pg_restore
-  register: postgresql_refresh_client_binaries
-
-- name: Require PostgreSQL client binaries
-  ansible.builtin.assert:
-    that:
-      - item.stat.exists
-      - item.stat.executable
-    fail_msg: >-
-      Required PostgreSQL {{ postgresql_refresh_client_version }} client binary
-      is missing: {{ item.stat.path }}. Install PostgreSQL client packages first.
-  loop: "{{ postgresql_refresh_client_binaries.results }}"
+- name: Discover RDS version and prepare matching PostgreSQL server
+  ansible.builtin.import_tasks: prepare.yml
 
 - name: Check source RDS connectivity and read its server version
   become_user: postgres
