@@ -186,14 +186,16 @@ INVENTORY_EOF
 
 secret_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-pg-refresh-vars.XXXXXX")"
 chmod 600 "$secret_file"
-printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s' \
+printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s' \
   "$ssh_password" "$sudo_password" "$source_host" "$source_port" \
   "$source_database" "$source_username" "$source_password" \
-  "$target_port" "$client_version" "$target_database" |
+  "$target_port" "$client_version" "$target_database" "$target_owner" "$overwrite_target" |
 python -c '
 import json, sys
 values = [v.decode() for v in sys.stdin.buffer.read().split(b"\0")]
-ssh_password, sudo_password, source_host, source_port, source_db, source_user, source_password, target_port, client_version, target_db = values
+(ssh_password, sudo_password, source_host, source_port, source_db,
+ source_user, source_password, target_port, client_version, target_db,
+ target_owner, overwrite_target) = values
 data = {
     "ansible_become_password": sudo_password,
     "postgresql_refresh_source_host": source_host,
@@ -204,7 +206,8 @@ data = {
     "postgresql_refresh_target_port": int(target_port),
     "postgresql_refresh_client_version": client_version,
     "postgresql_refresh_target_database": target_db,
-    "postgresql_refresh_overwrite_target": "${overwrite_target}" == "true",
+    "postgresql_refresh_target_owner": target_owner,
+    "postgresql_refresh_overwrite_target": overwrite_target == "true",
 }
 if ssh_password:
     data["ansible_password"] = ssh_password
@@ -212,18 +215,6 @@ with open(sys.argv[1], "w", encoding="utf-8") as f:
     json.dump(data, f)
     f.write("\n")
 ' "$secret_file"
-
-# Keep the selected owner separate from the secret input stream.
-python - "$secret_file" "$target_owner" <<'PY'
-import json, sys
-path, owner = sys.argv[1:]
-with open(path, encoding="utf-8") as f:
-    data = json.load(f)
-data["postgresql_refresh_target_owner"] = owner
-with open(path, "w", encoding="utf-8") as f:
-    json.dump(data, f)
-    f.write("\n")
-PY
 
 unset ssh_password sudo_password source_password
 
