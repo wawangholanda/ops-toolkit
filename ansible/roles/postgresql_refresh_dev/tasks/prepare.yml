@@ -113,7 +113,7 @@
   vars:
     postgresql_version: "{{ postgresql_refresh_detected_major }}"
     postgresql_port: "{{ postgresql_refresh_target_port }}"
-    postgresql_listen_addresses: "{{ postgresql_refresh_listen_addresses }}"
+    postgresql_listen_addresses: localhost
     postgresql_package_state: present
     postgresql_service_enabled: true
     postgresql_service_state: started
