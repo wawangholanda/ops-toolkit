@@ -390,31 +390,3 @@
       ansible.builtin.file:
         path: "{{ postgresql_refresh_temp_dir.path }}"
         state: absent
-
-        line: "host {{ postgresql_refresh_target_database }} {{ postgresql_refresh_app_username }} {{ postgresql_refresh_app_client_cidr }} scram-sha-256 # managed by ops-toolkit"
-        insertbefore: '^host(ssl|nossl)?\s+'
-        owner: postgres
-        group: postgres
-        mode: "0640"
-      register: postgresql_refresh_pg_hba_rule
-      when: postgresql_refresh_app_client_cidr | length > 0
-
-    - name: Restart PostgreSQL only after both remote access rules are in place
-      ansible.builtin.service:
-        name: postgresql
-        state: restarted
-      when:
-        - postgresql_refresh_app_client_cidr | length > 0
-        - postgresql_refresh_listen_config.changed or postgresql_refresh_pg_hba_rule.changed
-
-
-    - name: Report successful development database refresh
-      ansible.builtin.debug:
-        msg: >-
-          Development database {{ postgresql_refresh_target_database }} was
-          restored and connection-checked. Production source was not modified.
-  always:
-    - name: Remove temporary production dump and working directory
-      ansible.builtin.file:
-        path: "{{ postgresql_refresh_temp_dir.path }}"
-        state: absent
