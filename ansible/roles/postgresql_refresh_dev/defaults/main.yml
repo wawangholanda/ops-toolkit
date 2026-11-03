@@ -12,6 +12,10 @@ postgresql_refresh_target_owner: postgres
 postgresql_refresh_app_username: ""
 postgresql_refresh_app_password: ""
 
+# Network exposure stays local unless a trusted application CIDR is supplied.
+postgresql_refresh_listen_addresses: localhost
+postgresql_refresh_app_client_cidr: ""
+
 # Existing target databases are protected by default.
 postgresql_refresh_overwrite_target: false
 
