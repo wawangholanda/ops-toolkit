@@ -1,5 +1,11 @@
 ---
-# Debian/Ubuntu package-managed PostgreSQL cluster.
+postgresql_version: "18"
+postgresql_supported_versions:
+  - "15"
+  - "16"
+  - "17"
+  - "18"
+
 postgresql_package_state: present
 postgresql_service_name: postgresql
 postgresql_service_enabled: true
