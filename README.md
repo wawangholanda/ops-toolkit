@@ -46,7 +46,8 @@ bash scripts/redis-install.sh
 The quick-start prompts for the target host, SSH user, Redis port, optional Redis password, and SSH authentication details. It uses a temporary inventory and a mode-0600 temporary variables file; both are removed when the script exits.
 
 Defaults:
-- Redis listens on `127.0.0.1:6379` only.
+- Redis listens on `127.0.0.1:6379` by default. The quick-start lets you choose localhost, a private server IP, a custom IPv4 address, or `0.0.0.0` (all interfaces).
+- A selected specific IP must already be assigned to the target host; the Ansible role validates this before configuring Redis.
 - Protected mode remains enabled.
 - Redis starts now and is enabled at boot.
 - A Redis password is optional; supply one when the service needs authentication.
