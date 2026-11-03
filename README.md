@@ -12,10 +12,12 @@ This project starts with GitLab Runner lifecycle management, providing scripts t
 
 ## Requirements
 
-- Linux environment with Bash.
-- GitLab Runner installed on the target system, where required by the scripts.
-- Network access to the GitLab instance.
-- Appropriate permissions and credentials for the requested operation.
+- Linux environment with Bash, Python 3, and SSH client.
+- Ansible installed in a Python virtual environment (see `requirements.txt`).
+- `sshpass` on the control machine only when using SSH password authentication.
+- GitLab Runner installed on the target system, where required by the GitLab Runner management scripts.
+- Network access to the relevant package repositories and GitLab instance.
+- Appropriate SSH and sudo permissions on target hosts.
 
 See each script's usage instructions for its exact requirements.
 
