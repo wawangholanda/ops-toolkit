@@ -339,29 +339,36 @@
       changed_when: true
 
 
+    - name: Configure remote PostgreSQL listen address after restore
+      ansible.builtin.lineinfile:
+        path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/postgresql.conf"
+        regexp: '^\\s*#?\\s*listen_addresses\\s*='
+        line: "listen_addresses = '{{ postgresql_refresh_listen_addresses }}'"
+        owner: postgres
+        group: postgres
+        mode: "0640"
+      register: postgresql_refresh_listen_config
+      when: postgresql_refresh_app_client_cidr | length > 0
+
     - name: Add a CIDR-restricted application rule to pg_hba.conf
       ansible.builtin.lineinfile:
         path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/pg_hba.conf"
-        regexp: '^host\s+{{ postgresql_refresh_target_database | regex_escape }}\s+{{ postgresql_refresh_app_username | regex_escape }}\s+{{ postgresql_refresh_app_client_cidr | regex_escape }}\s+'
+        regexp: '^host\\s+{{ postgresql_refresh_target_database | regex_escape }}\\s+{{ postgresql_refresh_app_username | regex_escape }}\\s+{{ postgresql_refresh_app_client_cidr | regex_escape }}\\s+'
         line: "host {{ postgresql_refresh_target_database }} {{ postgresql_refresh_app_username }} {{ postgresql_refresh_app_client_cidr }} scram-sha-256"
-        insertbefore: '^host(ssl|nossl)?\s+'
+        insertbefore: '^host(ssl|nossl)?\\s+'
         owner: postgres
         group: postgres
         mode: "0640"
       register: postgresql_refresh_pg_hba_rule
       when: postgresql_refresh_app_client_cidr | length > 0
 
-    - name: Reload PostgreSQL after pg_hba.conf change
-      ansible.builtin.command:
-        argv:
-          - pg_ctlcluster
-          - "{{ postgresql_refresh_client_version }}"
-          - main
-          - reload
+    - name: Restart PostgreSQL only after both remote access rules are in place
+      ansible.builtin.service:
+        name: postgresql
+        state: restarted
       when:
         - postgresql_refresh_app_client_cidr | length > 0
-        - postgresql_refresh_pg_hba_rule.changed
-      changed_when: true
+        - postgresql_refresh_listen_config.changed or postgresql_refresh_pg_hba_rule.changed
 
 
     - name: Report successful development database refresh
