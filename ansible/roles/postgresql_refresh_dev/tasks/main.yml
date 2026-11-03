@@ -30,7 +30,7 @@
     argv:
       - python3
       - -c
-      - "import ipaddress,sys; n=ipaddress.ip_network(sys.argv[1], strict=False); a=ipaddress.ip_address(sys.argv[2]); assert n.version == 4 and a.version == 4 and n.prefixlen > 0"
+      - "import ipaddress,sys; n=ipaddress.ip_network(sys.argv[1], strict=False); a=ipaddress.ip_address(sys.argv[2]); assert n.version == 4 and a.version == 4 and n.prefixlen > 0 and not a.is_loopback and not a.is_unspecified"
       - "{{ postgresql_refresh_app_client_cidr }}"
       - "{{ postgresql_refresh_listen_addresses }}"
   changed_when: false
