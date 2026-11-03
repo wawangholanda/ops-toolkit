@@ -11,13 +11,15 @@
 - name: Validate PostgreSQL configuration inputs
   ansible.builtin.assert:
     that:
+      - postgresql_version | string in postgresql_supported_versions
       - postgresql_port | int >= 1
       - postgresql_port | int <= 65535
       - postgresql_listen_addresses | length > 0
       - postgresql_listen_addresses in ["localhost", "*"] or
         (postgresql_listen_addresses is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$'))
     fail_msg: >-
-      PostgreSQL listen address must be localhost, *, or one IPv4 address;
+      PostgreSQL version must be one of {{ postgresql_supported_versions }};
+      listen address must be localhost, *, or one IPv4 address;
       port must be between 1 and 65535.
 
 - name: Ensure selected PostgreSQL IPv4 address exists on the target
@@ -30,17 +32,61 @@
       to this host. Choose localhost, an address configured on this server,
       or * only when listening on all interfaces is intentional.
 
-- name: Install PostgreSQL server and client packages
+- name: Install PGDG repository prerequisites
   ansible.builtin.apt:
     name:
-      - postgresql
-      - postgresql-contrib
-      - postgresql-client
-    state: "{{ postgresql_package_state }}"
+      - ca-certificates
+    state: present
     update_cache: true
     cache_valid_time: 3600
 
-- name: Detect the default PostgreSQL cluster
+- name: Create PGDG keyring directory
+  ansible.builtin.file:
+    path: /usr/share/postgresql-common/pgdg
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download official PostgreSQL repository signing key
+  ansible.builtin.get_url:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    dest: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Detect APT architecture
+  ansible.builtin.command:
+    argv:
+      - dpkg
+      - --print-architecture
+  register: postgresql_apt_architecture
+  changed_when: false
+
+- name: Configure official PGDG APT repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/pgdg.sources
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: https://apt.postgresql.org/pub/repos/apt
+      Suites: {{ ansible_distribution_release }}-pgdg
+      Architectures: {{ postgresql_apt_architecture.stdout }}
+      Components: main
+      Signed-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+
+- name: Install selected PostgreSQL server and client major version
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgresql_version }}"
+      - "postgresql-client-{{ postgresql_version }}"
+    state: "{{ postgresql_package_state }}"
+    update_cache: true
+
+- name: Detect installed PostgreSQL clusters
   ansible.builtin.command:
     argv:
       - pg_lsclusters
@@ -48,18 +94,18 @@
   register: postgresql_clusters
   changed_when: false
 
-- name: Extract default PostgreSQL cluster version
+- name: Extract selected PostgreSQL main cluster version
   ansible.builtin.set_fact:
-    postgresql_cluster_version: "{{ (postgresql_clusters.stdout_lines | select('match', '^[0-9]+\s+main\s+') | list | first).split()[0] }}"
-  when: postgresql_clusters.stdout_lines | select('match', '^[0-9]+\s+main\s+') | list | length > 0
+    postgresql_cluster_version: "{{ (postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\\s+main\\s+') | list | first).split()[0] }}"
+  when: postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\\s+main\\s+') | list | length > 0
 
-- name: Verify the default PostgreSQL cluster exists
+- name: Verify selected PostgreSQL main cluster exists
   ansible.builtin.assert:
     that:
       - postgresql_cluster_version is defined
     fail_msg: >-
-      No default PostgreSQL 'main' cluster was found after package installation.
-      Inspect pg_lsclusters and the distribution package setup.
+      No PostgreSQL {{ postgresql_version }} 'main' cluster was found.
+      Inspect pg_lsclusters and the package installation output.
 
 - name: Configure PostgreSQL listen addresses
   ansible.builtin.lineinfile:
@@ -95,3 +141,23 @@
   register: postgresql_ready
   changed_when: false
   failed_when: postgresql_ready.rc != 0
+
+- name: Verify the responding PostgreSQL server major version
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -XAt
+      - -h
+      - "{{ '127.0.0.1' if postgresql_listen_addresses in ['localhost', '*'] else postgresql_listen_addresses }}"
+      - -p
+      - "{{ postgresql_port | string }}"
+      - -d
+      - postgres
+      - -c
+      - "SHOW server_version;"
+  register: postgresql_server_version
+  changed_when: false
+  failed_when: >-
+    postgresql_server_version.rc != 0 or
+    not postgresql_server_version.stdout.startswith(postgresql_version ~ '.')
