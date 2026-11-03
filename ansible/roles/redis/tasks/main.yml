@@ -22,6 +22,15 @@
         ]
     fail_msg: "One or more Redis configuration values are invalid."
 
+- name: Ensure Redis bind address exists on the target
+  ansible.builtin.assert:
+    that:
+      - redis_bind_address == "0.0.0.0" or redis_bind_address in ansible_all_ipv4_addresses
+    fail_msg: >-
+      Redis bind address {{ redis_bind_address }} is not assigned to this host.
+      Select an IPv4 address configured on the server, or use 0.0.0.0
+      if you intentionally want Redis to listen on every interface.
+
 - name: Install Redis server and CLI
   ansible.builtin.apt:
     name:
@@ -103,7 +112,7 @@
     argv:
       - redis-cli
       - -h
-      - 127.0.0.1
+      - "{{ '127.0.0.1' if redis_bind_address == '0.0.0.0' else redis_bind_address }}"
       - -p
       - "{{ redis_port | string }}"
       - ping
@@ -117,7 +126,7 @@
     argv:
       - redis-cli
       - -h
-      - 127.0.0.1
+      - "{{ '127.0.0.1' if redis_bind_address == '0.0.0.0' else redis_bind_address }}"
       - -p
       - "{{ redis_port | string }}"
       - ping
