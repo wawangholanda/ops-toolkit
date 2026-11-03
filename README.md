@@ -98,6 +98,35 @@ ansible-playbook -i /path/to/inventory.yml ansible/playbooks/postgresql.yml
 
 The inventory must define hosts in the `postgresql_servers` group.
 
+### PostgreSQL production-to-development refresh
+
+To refresh a development database from an AWS RDS PostgreSQL database, first install PostgreSQL on the development host with `scripts/postgresql-install.sh`. Then run:
+
+```bash
+source .venv/bin/activate
+bash scripts/postgresql-refresh-dev.sh
+```
+
+The refresh workflow:
+- Connects from the development host to the RDS source using PostgreSQL SSL (`sslmode=require` by default).
+- Checks source, target, and client major-version compatibility before dumping.
+- Creates a temporary custom-format dump on the development host, then restores it into the development database.
+- Uses `--no-owner` and `--no-acl`; restored objects are owned by the selected target database owner.
+- Removes the temporary dump directory after the workflow, including when a task fails.
+- Never changes the RDS source, application endpoints, or production infrastructure.
+
+Before running:
+- Allow the development host's outbound connection to the RDS endpoint and allow its private/public egress IP in the RDS security group on the database port.
+- Ensure the RDS user can connect to the selected database and read all objects/data required by `pg_dump`.
+- Ensure the target PostgreSQL client major version is at least the source major version, and the target server major version is not older than the source. This workflow does not support major-version downgrades.
+- Install required PostgreSQL extensions on the development host before restoring. Extension availability and RDS-specific features should be checked separately.
+- The target database owner role must already exist on the development server.
+- The temporary dump contains production data. The temporary directory is restricted to the PostgreSQL OS account, but use encrypted storage and protect the development host appropriately.
+
+The script refuses to overwrite an existing target database by default. To replace it, explicitly type `REPLACE` at the prompt. The dump is completed before an existing target database is dropped. If restore fails after replacement begins, the development database may be left partially restored; the RDS source remains untouched. Review and mask personal or sensitive production data before allowing developer access.
+
+The underlying playbook can also be run directly with an inventory group named `postgresql_refresh_targets` and the variables defined in `ansible/roles/postgresql_refresh_dev/defaults/main.yml`. Keep source credentials in Ansible Vault or a protected vars file; never commit them.
+
 ## Security
 
 - Never commit runner authentication tokens, registration tokens, private keys, or other secrets.
