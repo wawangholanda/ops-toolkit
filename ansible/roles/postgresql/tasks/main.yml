@@ -66,7 +66,6 @@
     path: "/etc/postgresql/{{ postgresql_cluster_version }}/main/postgresql.conf"
     regexp: '^\s*#?\s*listen_addresses\s*='
     line: "listen_addresses = '{{ postgresql_listen_addresses }}'"
-    mode: "0644"
   notify: Restart PostgreSQL
 
 - name: Configure PostgreSQL port
@@ -74,7 +73,6 @@
     path: "/etc/postgresql/{{ postgresql_cluster_version }}/main/postgresql.conf"
     regexp: '^\s*#?\s*port\s*='
     line: "port = {{ postgresql_port }}"
-    mode: "0644"
   notify: Restart PostgreSQL
 
 - name: Enable and start PostgreSQL service
