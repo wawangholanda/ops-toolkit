@@ -114,7 +114,9 @@ The refresh workflow:
 - Automatically installs/prepares the matching PostgreSQL server and client major version on Development. Other installed PostgreSQL major versions are left in place; packages and clusters are not automatically uninstalled or deleted.
 - Checks source, target, and client major-version compatibility before dumping.
 - Creates a temporary custom-format dump on the development host, then restores it into the development database.
-- Uses `--no-owner` and `--no-acl`; restored objects are owned by the selected target database owner.
+- Uses `--no-owner` and `--no-acl`; restored objects are owned by the PostgreSQL restore account, while the database itself is owned by the selected target database owner.
+- Prompts for a separate Development application username and password. If the role does not exist, it is created as a login role; if it already exists, its password is preserved.
+- Grants the application role `CONNECT`, `USAGE` on the `public` schema, CRUD access to existing tables, and sequence access. Default privileges are configured for objects created by the PostgreSQL restore account and the selected database owner.
 - Removes the temporary dump directory after the workflow, including when a task fails.
 - Never changes the RDS source, application endpoints, or production infrastructure.
 
@@ -123,7 +125,7 @@ Before running:
 - Ensure the RDS user can connect to the selected database and read all objects/data required by `pg_dump`.
 - The requested target port must be free for the matching PostgreSQL cluster. If another PostgreSQL cluster already owns that port, the installer stops safely; choose another target port or resolve the conflict manually. Existing clusters and data are not automatically removed.
 - Install required PostgreSQL extensions on the development host before restoring. Extension availability and RDS-specific features should be checked separately.
-- The target database owner role must already exist on the development server.
+- The target database owner role must already exist on the development server. The application username must be different from the database owner, and its password must be at least 16 characters.
 - The temporary dump contains production data. The temporary directory is restricted to the PostgreSQL OS account, but use encrypted storage and protect the development host appropriately.
 
 The script refuses to overwrite an existing target database by default. To replace it, explicitly type `REPLACE` at the prompt. The dump is completed before an existing target database is dropped. If restore fails after replacement begins, the development database may be left partially restored; the RDS source remains untouched. Review and mask personal or sensitive production data before allowing developer access.
