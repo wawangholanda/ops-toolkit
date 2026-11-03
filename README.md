@@ -88,7 +88,7 @@ Defaults:
 
 **Important:** changing `listen_addresses` alone does not grant remote database access. Remote clients also need an intentional `pg_hba.conf` rule, appropriate authentication, and a firewall rule restricted to trusted source addresses. Do not expose PostgreSQL directly to the Internet.
 
-For advanced configuration, edit `ansible/roles/postgresql/defaults/main.yml` or pass overrides through a protected Ansible vars file.
+For advanced configuration, edit `ansible/roles/postgresql/defaults/main.yml` or pass overrides through a protected Ansible vars file. For example, set `postgresql_version: "17"` to select PostgreSQL 17.
 
 The playbook can also be run directly:
 
