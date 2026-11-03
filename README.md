@@ -9,6 +9,7 @@ This project starts with GitLab Runner lifecycle management, providing scripts t
 - **GitLab Runner Registration** — automate the runner registration workflow.
 - **GitLab Runner Unregistration** — simplify the runner unregistration workflow.
 - **Redis Installation** — install and configure Redis on Debian and Ubuntu hosts using Ansible.
+- **PostgreSQL Installation** — install and configure PostgreSQL on Debian and Ubuntu hosts using Ansible.
 
 ## Requirements
 
@@ -62,6 +63,38 @@ ansible-playbook -i ansible/inventory/dev/hosts.yml ansible/playbooks/redis.yml
 ```
 
 The inventory must define hosts in the `redis_servers` group.
+
+### PostgreSQL installation
+
+The PostgreSQL role installs the distribution-supported packages from the configured APT repositories. It does not pin a PostgreSQL major version; the installed version depends on the target OS repositories.
+
+Activate the project's Ansible virtual environment, then run:
+
+```bash
+source .venv/bin/activate
+bash scripts/postgresql-install.sh
+```
+
+The quick-start prompts for the target host, SSH user, PostgreSQL port, listen address, and SSH authentication details. It creates temporary inventory and mode-0600 variables files and removes them on exit.
+
+Defaults:
+- PostgreSQL listens on `localhost:5432` (local connections only).
+- You can select localhost, a private server IP, a custom IPv4 address, or `*` (all interfaces).
+- A selected specific IPv4 address must already be assigned to the target host.
+- The role enables and starts the PostgreSQL service and verifies readiness with `pg_isready`.
+- No database user or password is created, no `pg_hba.conf` rules are modified, and no reboot is performed.
+
+**Important:** changing `listen_addresses` alone does not grant remote database access. Remote clients also need an intentional `pg_hba.conf` rule, appropriate authentication, and a firewall rule restricted to trusted source addresses. Do not expose PostgreSQL directly to the Internet.
+
+For advanced configuration, edit `ansible/roles/postgresql/defaults/main.yml` or pass overrides through a protected Ansible vars file.
+
+The playbook can also be run directly:
+
+```bash
+ansible-playbook -i /path/to/inventory.yml ansible/playbooks/postgresql.yml
+```
+
+The inventory must define hosts in the `postgresql_servers` group.
 
 ## Security
 
