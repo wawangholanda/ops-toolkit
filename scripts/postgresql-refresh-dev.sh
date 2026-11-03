@@ -200,7 +200,8 @@ chmod 600 "$secret_file"
 printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s' \
   "$ssh_password" "$sudo_password" "$source_host" "$source_port" \
   "$source_database" "$source_username" "$source_password" \
-  "$target_port" "$target_database" "$target_owner" "$overwrite_target" |
+  "$target_port" "$target_database" "$target_owner" "$overwrite_target" \
+  "$app_username" "$app_password" |
 python -c '
 import json, sys
 values = [v.decode() for v in sys.stdin.buffer.read().split(b"\0")]
