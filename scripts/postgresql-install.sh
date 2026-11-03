@@ -40,6 +40,25 @@ echo
 read -r -p "IP atau hostname server PostgreSQL: " server
 read -r -p "Username SSH: " ssh_user
 
+echo
+echo "Pilih PostgreSQL major version dari repository resmi PGDG:"
+echo "  1) PostgreSQL 18 (default)"
+echo "  2) PostgreSQL 17"
+echo "  3) PostgreSQL 16"
+echo "  4) PostgreSQL 15"
+read -r -p "Pilihan [1]: " version_choice
+version_choice="${version_choice:-1}"
+case "$version_choice" in
+  1) postgresql_version="18" ;;
+  2) postgresql_version="17" ;;
+  3) postgresql_version="16" ;;
+  4) postgresql_version="15" ;;
+  *)
+    echo "ERROR: Pilihan versi tidak valid."
+    exit 1
+    ;;
+esac
+
 [[ -n "$server" && -n "$ssh_user" ]] || {
   echo "ERROR: IP/hostname dan username SSH wajib diisi."
   exit 1
@@ -159,14 +178,15 @@ INVENTORY_EOF
 
 secret_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-postgresql-vars.XXXXXX")"
 chmod 600 "$secret_file"
-printf '%s\0%s\0%s\0%s' "$ssh_password" "$sudo_password" "$postgresql_port" "$postgresql_listen_addresses" |
+printf '%s\0%s\0%s\0%s\0%s' "$ssh_password" "$sudo_password" "$postgresql_port" "$postgresql_listen_addresses" "$postgresql_version" |
 python -c '
 import json, sys
-ssh_password, sudo_password, port, listen = (v.decode() for v in sys.stdin.buffer.read().split(b"\0"))
+ssh_password, sudo_password, port, listen, version = (v.decode() for v in sys.stdin.buffer.read().split(b"\0"))
 data = {
     "ansible_become_password": sudo_password,
     "postgresql_port": int(port),
     "postgresql_listen_addresses": listen,
+    "postgresql_version": version,
 }
 if ssh_password:
     data["ansible_password"] = ssh_password
