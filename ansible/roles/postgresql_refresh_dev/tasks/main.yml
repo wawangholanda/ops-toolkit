@@ -342,7 +342,7 @@
     - name: Configure remote PostgreSQL listen address after restore
       ansible.builtin.lineinfile:
         path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/postgresql.conf"
-        regexp: '^\\s*#?\\s*listen_addresses\\s*='
+        regexp: '^\s*#?\s*listen_addresses\s*='
         line: "listen_addresses = '{{ postgresql_refresh_listen_addresses }}'"
         owner: postgres
         group: postgres
@@ -353,9 +353,9 @@
     - name: Add a CIDR-restricted application rule to pg_hba.conf
       ansible.builtin.lineinfile:
         path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/pg_hba.conf"
-        regexp: '^host\\s+{{ postgresql_refresh_target_database | regex_escape }}\\s+{{ postgresql_refresh_app_username | regex_escape }}\\s+{{ postgresql_refresh_app_client_cidr | regex_escape }}\\s+'
+        regexp: '^host\s+{{ postgresql_refresh_target_database | regex_escape }}\s+{{ postgresql_refresh_app_username | regex_escape }}\s+{{ postgresql_refresh_app_client_cidr | regex_escape }}\s+'
         line: "host {{ postgresql_refresh_target_database }} {{ postgresql_refresh_app_username }} {{ postgresql_refresh_app_client_cidr }} scram-sha-256"
-        insertbefore: '^host(ssl|nossl)?\\s+'
+        insertbefore: '^host(ssl|nossl)?\s+'
         owner: postgres
         group: postgres
         mode: "0640"
