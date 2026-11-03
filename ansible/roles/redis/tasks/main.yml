@@ -1,0 +1,132 @@
+---
+- name: Validate target operating system
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == "Debian"
+      - ansible_distribution in redis_supported_distributions
+    fail_msg: >-
+      This role supports Debian and Ubuntu systems using APT.
+      Detected: {{ ansible_distribution }} {{ ansible_distribution_version }}.
+
+- name: Validate Redis configuration inputs
+  ansible.builtin.assert:
+    that:
+      - redis_port | int >= 1
+      - redis_port | int <= 65535
+      - redis_bind_address | length > 0
+      - redis_protected_mode in ["yes", "no"]
+      - redis_maxmemory_policy in [
+          "volatile-lru", "allkeys-lru", "volatile-lfu", "allkeys-lfu",
+          "volatile-random", "allkeys-random", "volatile-ttl",
+          "noeviction"
+        ]
+    fail_msg: "One or more Redis configuration values are invalid."
+
+- name: Install Redis server and CLI
+  ansible.builtin.apt:
+    name:
+      - "{{ redis_package_name }}"
+      - redis-tools
+    state: "{{ redis_package_state }}"
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Configure Redis bind address
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^\s*#?\s*bind\s+'
+    line: "bind {{ redis_bind_address }}"
+    insertafter: BOF
+    mode: "0640"
+  notify: Restart Redis
+
+- name: Configure Redis port
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^\s*#?\s*port\s+'
+    line: "port {{ redis_port }}"
+    insertafter: EOF
+    mode: "0640"
+  notify: Restart Redis
+
+- name: Configure Redis protected mode
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^\s*#?\s*protected-mode\s+'
+    line: "protected-mode {{ redis_protected_mode }}"
+    insertafter: EOF
+    mode: "0640"
+  notify: Restart Redis
+
+- name: Configure Redis password when explicitly provided
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^\s*#?\s*requirepass\s+'
+    line: "requirepass {{ redis_password }}"
+    insertafter: EOF
+    mode: "0640"
+  no_log: true
+  when: redis_password | length > 0
+  notify: Restart Redis
+
+- name: Configure Redis maxmemory when explicitly provided
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^\s*#?\s*maxmemory\s+'
+    line: "maxmemory {{ redis_maxmemory }}"
+    insertafter: EOF
+    mode: "0640"
+  when: redis_maxmemory | length > 0
+  notify: Restart Redis
+
+- name: Configure Redis maxmemory policy when maxmemory is set
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^\s*#?\s*maxmemory-policy\s+'
+    line: "maxmemory-policy {{ redis_maxmemory_policy }}"
+    insertafter: EOF
+    mode: "0640"
+  when: redis_maxmemory | length > 0
+  notify: Restart Redis
+
+- name: Enable and start Redis service
+  ansible.builtin.service:
+    name: "{{ redis_service_name }}"
+    enabled: "{{ redis_service_enabled }}"
+    state: "{{ redis_service_state }}"
+
+- name: Flush handlers before Redis health check
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify Redis responds without authentication
+  ansible.builtin.command:
+    argv:
+      - redis-cli
+      - -h
+      - 127.0.0.1
+      - -p
+      - "{{ redis_port | string }}"
+      - ping
+  environment:
+    REDISCLI_AUTH: ""
+  register: redis_ping
+  changed_when: false
+  failed_when: redis_ping.rc != 0 or redis_ping.stdout | trim != "PONG"
+  when: redis_password | length == 0
+
+- name: Verify Redis responds with authentication
+  ansible.builtin.command:
+    argv:
+      - redis-cli
+      - -h
+      - 127.0.0.1
+      - -p
+      - "{{ redis_port | string }}"
+      - ping
+  environment:
+    REDISCLI_AUTH: "{{ redis_password }}"
+  register: redis_authenticated_ping
+  changed_when: false
+  failed_when: redis_authenticated_ping.rc != 0 or redis_authenticated_ping.stdout | trim != "PONG"
+  no_log: true
+  when: redis_password | length > 0
