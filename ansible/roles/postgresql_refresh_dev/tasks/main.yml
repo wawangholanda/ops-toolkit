@@ -8,6 +8,13 @@
       - postgresql_refresh_source_password | length > 0
       - postgresql_refresh_target_database is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
       - postgresql_refresh_target_owner is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_app_username is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_app_username != postgresql_refresh_target_owner
+      - postgresql_refresh_app_password | length >= 16
+      - postgresql_refresh_listen_addresses in ['localhost', '*'] or postgresql_refresh_listen_addresses is match('^([0-9]{1,3}\\.){3}[0-9]{1,3}$')
+      - postgresql_refresh_app_client_cidr == '' or postgresql_refresh_app_client_cidr is match('^([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$')
+      - postgresql_refresh_app_client_cidr == '' or postgresql_refresh_listen_addresses not in ['localhost', '*']
+      - postgresql_refresh_app_client_cidr | length > 0 or postgresql_refresh_listen_addresses == 'localhost'
       - postgresql_refresh_source_port | int >= 1
       - postgresql_refresh_source_port | int <= 65535
       - postgresql_refresh_target_port | int >= 1
@@ -286,6 +293,31 @@
           SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO %I', role_name, nspname, :'app_user')
           FROM (SELECT DISTINCT n.nspname, r.rolname AS role_name FROM pg_namespace n CROSS JOIN LATERAL (VALUES ('postgres'::text), (:'target_owner'::text)) AS owners(role_name) JOIN pg_roles r ON r.rolname = owners.role_name WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%') AS d
           \gexec
+      changed_when: true
+
+
+    - name: Add a CIDR-restricted application rule to pg_hba.conf
+      ansible.builtin.lineinfile:
+        path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/pg_hba.conf"
+        regexp: '^host\\s+{{ postgresql_refresh_target_database | regex_escape }}\\s+{{ postgresql_refresh_app_username | regex_escape }}\\s+{{ postgresql_refresh_app_client_cidr | regex_escape }}\\s+'
+        line: "host {{ postgresql_refresh_target_database }} {{ postgresql_refresh_app_username }} {{ postgresql_refresh_app_client_cidr }} scram-sha-256"
+        insertbefore: '^host\\s+'
+        owner: postgres
+        group: postgres
+        mode: "0640"
+      register: postgresql_refresh_pg_hba_rule
+      when: postgresql_refresh_app_client_cidr | length > 0
+
+    - name: Reload PostgreSQL after pg_hba.conf change
+      ansible.builtin.command:
+        argv:
+          - pg_ctlcluster
+          - "{{ postgresql_refresh_client_version }}"
+          - main
+          - reload
+      when:
+        - postgresql_refresh_app_client_cidr | length > 0
+        - postgresql_refresh_pg_hba_rule.changed
       changed_when: true
 
 
