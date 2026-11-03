@@ -17,7 +17,7 @@ inventory_file=""
 
 cleanup() {
   rm -f -- "${auth_file:-}" "${secret_file:-}" "${inventory_file:-}"
-  unset ssh_password sudo_password source_password
+  unset ssh_password sudo_password source_password app_password
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -64,9 +64,12 @@ read -r -p "Nama database development [${source_database}]: " target_database
 target_database="${target_database:-$source_database}"
 read -r -p "Owner database development [postgres]: " target_owner
 target_owner="${target_owner:-postgres}"
+read -r -p "Username application Development: " app_username
+read -r -s -p "Password application Development (minimal 16 karakter): " app_password
+echo
 
 [[ -n "$source_host" && -n "$source_username" && -n "$source_password" &&
-   -n "$target_server" && -n "$ssh_user" ]] || {
+   -n "$target_server" && -n "$ssh_user" && -n "$app_username" && -n "$app_password" ]] || {
   echo "ERROR: Semua field koneksi wajib diisi."
   exit 1
 }
@@ -80,6 +83,18 @@ valid_identifier "$target_database" || {
 }
 valid_identifier "$target_owner" || {
   echo "ERROR: Nama owner database tidak valid."
+  exit 1
+}
+valid_identifier "$app_username" || {
+  echo "ERROR: Username application tidak valid."
+  exit 1
+}
+[[ "${#app_password}" -ge 16 ]] || {
+  echo "ERROR: Password application minimal 16 karakter."
+  exit 1
+}
+[[ "$app_username" != "$target_owner" ]] || {
+  echo "ERROR: Application user harus berbeda dari database owner agar hak aksesnya tetap terpisah."
   exit 1
 }
 valid_port "$source_port" && valid_port "$target_port" || {
@@ -98,6 +113,8 @@ echo "Ringkasan:"
 echo "  Source : $source_database @ $source_host:$source_port (RDS)"
 echo "  Target : $target_database @ $target_server:$target_port"
 echo "  Owner  : $target_owner"
+echo "  App user: $app_username"
+echo "  App password: akan digunakan hanya jika role belum ada; password role existing tidak diubah."
 echo
 echo "Catatan:"
 echo "- Versi RDS akan dideteksi otomatis; PostgreSQL server/client yang sesuai akan disiapkan pada Development."
@@ -188,7 +205,8 @@ python -c '
 import json, sys
 values = [v.decode() for v in sys.stdin.buffer.read().split(b"\0")]
 (ssh_password, sudo_password, source_host, source_port, source_db,
- source_user, source_password, target_port, target_db, target_owner, overwrite_target) = values
+ source_user, source_password, target_port, target_db, target_owner,
+ overwrite_target, app_username, app_password) = values
 data = {
     "ansible_become_password": sudo_password,
     "postgresql_refresh_source_host": source_host,
@@ -200,6 +218,8 @@ data = {
     "postgresql_refresh_target_database": target_db,
     "postgresql_refresh_target_owner": target_owner,
     "postgresql_refresh_overwrite_target": overwrite_target == "true",
+    "postgresql_refresh_app_username": app_username,
+    "postgresql_refresh_app_password": app_password,
 }
 if ssh_password:
     data["ansible_password"] = ssh_password
