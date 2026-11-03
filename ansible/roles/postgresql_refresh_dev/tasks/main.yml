@@ -55,6 +55,27 @@
 - name: Discover RDS version and prepare matching PostgreSQL server
   ansible.builtin.import_tasks: prepare.yml
 
+- name: Remove stale Ops Toolkit managed remote pg_hba rules while listener is local
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/pg_hba.conf"
+    regexp: '^host\\s+.*# managed by ops-toolkit$'
+    state: absent
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  register: postgresql_refresh_stale_hba_rules
+
+- name: Reload PostgreSQL after removing stale managed pg_hba rules
+  ansible.builtin.command:
+    argv:
+      - pg_ctlcluster
+      - "{{ postgresql_refresh_client_version }}"
+      - main
+      - reload
+  when: postgresql_refresh_stale_hba_rules.changed
+  changed_when: true
+
+
 - name: Check source RDS connectivity and read its server version
   become_user: postgres
   ansible.builtin.command:
