@@ -161,7 +161,7 @@ printf '%s\0%s\0%s\0%s' \
 python -c '
 import json, sys
 ssh_password, sudo_password, redis_password, redis_port = (
-    value.decode() for value in sys.stdin.buffer.read().split(b"\\0")
+    value.decode() for value in sys.stdin.buffer.read().split(b"\0")
 )
 data = {
     "ansible_become_password": sudo_password,
@@ -172,7 +172,7 @@ if ssh_password:
     data["ansible_password"] = ssh_password
 with open(sys.argv[1], "w", encoding="utf-8") as f:
     json.dump(data, f)
-    f.write("\\n")
+    f.write("\n")
 ' "$secret_file"
 
 unset ssh_password sudo_password redis_password
