@@ -144,6 +144,29 @@
 
 - name: Refresh development database
   block:
+    - name: Dump production database from RDS in custom format
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/pg_dump"
+          - --no-password
+          - --format=custom
+          - --file
+          - "{{ postgresql_refresh_temp_dir.path }}/production.dump"
+          - -h
+          - "{{ postgresql_refresh_source_host }}"
+          - -p
+          - "{{ postgresql_refresh_source_port | string }}"
+          - -U
+          - "{{ postgresql_refresh_source_username }}"
+          - -d
+          - "{{ postgresql_refresh_source_database }}"
+      environment:
+        PGPASSWORD: "{{ postgresql_refresh_source_password }}"
+        PGSSLMODE: "{{ postgresql_refresh_source_sslmode }}"
+        PGCONNECT_TIMEOUT: "10"
+      no_log: true
+
     - name: Drop existing target database when explicit overwrite is enabled
       become_user: postgres
       ansible.builtin.command:
@@ -168,29 +191,6 @@
           - -O
           - "{{ postgresql_refresh_target_owner }}"
           - "{{ postgresql_refresh_target_database }}"
-
-    - name: Dump production database from RDS in custom format
-      become_user: postgres
-      ansible.builtin.command:
-        argv:
-          - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/pg_dump"
-          - --no-password
-          - --format=custom
-          - --file
-          - "{{ postgresql_refresh_temp_dir.path }}/production.dump"
-          - -h
-          - "{{ postgresql_refresh_source_host }}"
-          - -p
-          - "{{ postgresql_refresh_source_port | string }}"
-          - -U
-          - "{{ postgresql_refresh_source_username }}"
-          - -d
-          - "{{ postgresql_refresh_source_database }}"
-      environment:
-        PGPASSWORD: "{{ postgresql_refresh_source_password }}"
-        PGSSLMODE: "{{ postgresql_refresh_source_sslmode }}"
-        PGCONNECT_TIMEOUT: "10"
-      no_log: true
 
     - name: Restore production dump into development database
       become_user: postgres
