@@ -105,6 +105,8 @@ try:
     address = ipaddress.ip_address(sys.argv[2])
     if network.version != 4 or address.version != 4:
         raise ValueError("IPv4 only")
+    if address.is_loopback or address.is_unspecified or network.prefixlen == 0:
+        raise ValueError("Use a specific non-loopback server IP and a non-default CIDR")
 except ValueError:
     print("ERROR: CIDR dan listen address harus IPv4 yang valid.")
     raise SystemExit(1)
