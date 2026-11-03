@@ -7,7 +7,12 @@
       - postgresql_refresh_source_username | length > 0
       - postgresql_refresh_source_password | length > 0
       - postgresql_refresh_target_database is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
-      - postgresql_refresh_target_owner is match('^[A-Za-z_][A-Za-z0-9_]{0,62}
+      - postgresql_refresh_target_owner is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_app_username is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_app_username != postgresql_refresh_target_owner
+      - postgresql_refresh_app_password | length >= 16
+      - postgresql_refresh_source_port | int >= 1
+      - postgresql_refresh_source_port | int <= 65535
       - postgresql_refresh_target_port | int >= 1
       - postgresql_refresh_target_port | int <= 65535
       - postgresql_refresh_source_sslmode in ['require', 'verify-ca', 'verify-full']
