@@ -93,13 +93,41 @@
     that:
       - (postgresql_refresh_source_version_num.stdout | int // 10000) <= (postgresql_refresh_client_version | int)
       - (postgresql_refresh_source_version_num.stdout | int // 10000) <= (postgresql_refresh_target_version_num.stdout | int // 10000)
+      - (postgresql_refresh_target_version_num.stdout | int // 10000) == (postgresql_refresh_client_version | int)
     fail_msg: >-
       The source major version must not be newer than the installed pg_dump
-      client or the target PostgreSQL server. Source server version number:
+      client or target server, and the client major version must match the
+      target server major version. Source server version number:
       {{ postgresql_refresh_source_version_num.stdout }}; target server version
       number: {{ postgresql_refresh_target_version_num.stdout }}; client major:
       {{ postgresql_refresh_client_version }}. PostgreSQL major-version
       downgrades are not supported by this workflow.
+
+- name: Check whether target database owner role exists
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/psql"
+      - -XAt
+      - -v
+      - ON_ERROR_STOP=1
+      - -p
+      - "{{ postgresql_refresh_target_port | string }}"
+      - -d
+      - postgres
+      - -c
+      - "SELECT 1 FROM pg_roles WHERE rolname = '{{ postgresql_refresh_target_owner }}';"
+  register: postgresql_refresh_target_owner_exists
+  changed_when: false
+
+- name: Require target database owner role to exist before refresh
+  ansible.builtin.assert:
+    that:
+      - postgresql_refresh_target_owner_exists.stdout | trim == '1'
+    fail_msg: >-
+      Target role {{ postgresql_refresh_target_owner }} does not exist on the
+      development PostgreSQL server. Create the role first or choose an
+      existing owner. The target database has not been modified.
 
 - name: Check whether target database already exists
   become_user: postgres
