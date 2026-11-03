@@ -152,7 +152,7 @@
       - -d
       - postgres
       - -c
-      - "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{{ postgresql_refresh_app_username }}') THEN CASE WHEN EXISTS (SELECT 1 FROM pg_roles r JOIN pg_authid a ON a.oid = r.oid WHERE r.rolname = '{{ postgresql_refresh_app_username }}' AND (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls OR a.rolpassword NOT LIKE 'SCRAM-SHA-256$%')) OR pg_has_role('{{ postgresql_refresh_app_username }}', '{{ postgresql_refresh_target_owner }}', 'MEMBER') THEN '1' ELSE '0' END ELSE '0' END;"
+      - "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{{ postgresql_refresh_app_username }}') THEN CASE WHEN EXISTS (SELECT 1 FROM pg_roles r JOIN pg_authid a ON a.oid = r.oid WHERE r.rolname = '{{ postgresql_refresh_app_username }}' AND (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls OR COALESCE(a.rolpassword, '') NOT LIKE 'SCRAM-SHA-256$%')) OR pg_has_role('{{ postgresql_refresh_app_username }}', '{{ postgresql_refresh_target_owner }}', 'MEMBER') THEN '1' ELSE '0' END ELSE '0' END;"
   register: postgresql_refresh_app_role_privileges
   changed_when: false
 
