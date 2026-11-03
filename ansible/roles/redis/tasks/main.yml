@@ -107,8 +107,6 @@
       - -p
       - "{{ redis_port | string }}"
       - ping
-  environment:
-    REDISCLI_AUTH: ""
   register: redis_ping
   changed_when: false
   failed_when: redis_ping.rc != 0 or redis_ping.stdout | trim != "PONG"
