@@ -173,7 +173,7 @@ prompt_with_default app_username "Development application username" "$app_userna
 read -r -s -p "Development application password (not saved; used only if the role does not exist; at least 16 characters): " app_password
 echo
 prompt_with_default listen_address "PostgreSQL listen address (use localhost for local access)" "$listen_address_default"
-read -r -p "Application source CIDR [${app_client_cidr_default:-blank}] (enter 'none' for local-only access): " app_client_cidr_input
+read -r -p "Application source CIDR [${app_client_cidr_default:-blank}] (comma-separated for multiple CIDRs; enter 'none' for local-only access): " app_client_cidr_input
 if [[ "$app_client_cidr_input" == "none" ]]; then
   app_client_cidr=""
 else
