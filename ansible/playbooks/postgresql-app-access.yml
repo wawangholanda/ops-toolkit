@@ -1,0 +1,103 @@
+---
+- name: Configure restricted access to an existing PostgreSQL application database
+  hosts: postgresql_app_access_targets
+  become: true
+  gather_facts: false
+
+  vars:
+    postgresql_access_version: "18"
+    postgresql_access_port: 5432
+    postgresql_access_database: ""
+    postgresql_access_username: ""
+    postgresql_access_client_cidr: ""
+
+  tasks:
+    - name: Validate PostgreSQL access inputs
+      ansible.builtin.assert:
+        that:
+          - postgresql_access_version is match('^(15|16|17|18)$')
+          - postgresql_access_port | int >= 1
+          - postgresql_access_port | int <= 65535
+          - postgresql_access_database is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+          - postgresql_access_username is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+          - postgresql_access_client_cidr | length > 0
+        fail_msg: >-
+          Supply a supported PostgreSQL version, valid port, database and role
+          names, and a trusted private IPv4 client CIDR.
+
+    - name: Validate that the client CIDR is a restricted private IPv4 network
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - "import ipaddress,sys; n=ipaddress.ip_network(sys.argv[1], strict=False); assert n.version == 4 and n.prefixlen > 0 and n.is_private and not n.network_address.is_loopback and not n.network_address.is_unspecified"
+          - "{{ postgresql_access_client_cidr }}"
+      changed_when: false
+
+    - name: Check that the selected PostgreSQL cluster configuration exists
+      ansible.builtin.stat:
+        path: "/etc/postgresql/{{ postgresql_access_version }}/main/pg_hba.conf"
+      register: postgresql_access_hba_file
+
+    - name: Require the selected PostgreSQL cluster to exist
+      ansible.builtin.assert:
+        that:
+          - postgresql_access_hba_file.stat.exists
+          - postgresql_access_hba_file.stat.isreg
+        fail_msg: >-
+          PostgreSQL {{ postgresql_access_version }} main cluster was not found
+          on this host. No configuration was changed.
+
+    - name: Add or update the managed application access rule
+      ansible.builtin.lineinfile:
+        path: "/etc/postgresql/{{ postgresql_access_version }}/main/pg_hba.conf"
+        regexp: '^host\s+{{ postgresql_access_database | regex_escape }}\s+{{ postgresql_access_username | regex_escape }}\s+.*# managed by ops-toolkit$'
+        line: "host {{ postgresql_access_database }} {{ postgresql_access_username }} {{ postgresql_access_client_cidr }} scram-sha-256 # managed by ops-toolkit"
+        owner: postgres
+        group: postgres
+        mode: "0640"
+        state: present
+      register: postgresql_access_hba_rule
+
+    - name: Reload PostgreSQL after changing the access rule
+      ansible.builtin.command:
+        argv:
+          - pg_ctlcluster
+          - "{{ postgresql_access_version }}"
+          - main
+          - reload
+      when: postgresql_access_hba_rule.changed
+      changed_when: true
+
+    - name: Verify that PostgreSQL parsed the application access rule
+      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_access_version }}/bin/psql"
+          - -XAt
+          - -v
+          - ON_ERROR_STOP=1
+          - -p
+          - "{{ postgresql_access_port | string }}"
+          - -d
+          - postgres
+          - -c
+          - "SELECT count(*) FROM pg_hba_file_rules WHERE type = 'host' AND database @> ARRAY['{{ postgresql_access_database }}'] AND user_name @> ARRAY['{{ postgresql_access_username }}'] AND auth_method = 'scram-sha-256' AND error IS NULL;"
+      register: postgresql_access_rule_check
+      changed_when: false
+
+    - name: Require a valid parsed application access rule
+      ansible.builtin.assert:
+        that:
+          - postgresql_access_rule_check.stdout | int > 0
+        fail_msg: >-
+          PostgreSQL did not report a valid SCRAM host rule for the requested
+          database and role. Review pg_hba.conf before allowing application access.
+
+    - name: Report successful PostgreSQL access configuration
+      ansible.builtin.debug:
+        msg: >-
+          PostgreSQL {{ postgresql_access_version }} access is configured for
+          database {{ postgresql_access_database }}, role
+          {{ postgresql_access_username }}, and client CIDR
+          {{ postgresql_access_client_cidr }}. Firewall rules are not changed.
