@@ -65,7 +65,7 @@ target_database="${target_database:-$source_database}"
 read -r -p "Owner database development [postgres]: " target_owner
 target_owner="${target_owner:-postgres}"
 read -r -p "Username application Development: " app_username
-read -r -s -p "Password application Development (minimal 16 karakter): " app_password
+read -r -s -p "Password application Development (dipakai hanya jika role belum ada; minimal 16 karakter): " app_password
 echo
 read -r -p "PostgreSQL listen address [localhost; isi IP server jika remote]: " listen_address
 listen_address="${listen_address:-localhost}"
@@ -105,6 +105,8 @@ try:
     address = ipaddress.ip_address(sys.argv[2])
     if network.version != 4 or address.version != 4:
         raise ValueError("IPv4 only")
+    if address.is_loopback or address.is_unspecified or network.prefixlen == 0:
+        raise ValueError("Use a specific non-loopback server IP and a non-default CIDR")
 except ValueError:
     print("ERROR: CIDR dan listen address harus IPv4 yang valid.")
     raise SystemExit(1)
@@ -149,8 +151,9 @@ echo "- Versi RDS akan dideteksi otomatis; PostgreSQL server/client yang sesuai 
 echo "- Versi PostgreSQL lain yang sudah terpasang tidak akan dihapus otomatis."
 echo "- Server development harus dapat menjangkau endpoint RDS pada port $source_port."
 echo "- Security Group RDS harus mengizinkan koneksi dari server development."
+echo "- Akses aplikasi remote hanya dibuka untuk CIDR yang dimasukkan; firewall/security group Development tetap perlu diatur manual."
 echo "- SSL RDS menggunakan sslmode=require."
-echo "- Restore menggunakan --no-owner dan --no-acl; object akan dimiliki target owner."
+echo "- Restore menggunakan --no-owner dan --no-acl; object dimiliki OS role postgres, sedangkan database dimiliki target owner."
 echo "- Pastikan extension yang dipakai production tersedia pada server development."
 echo
 read -r -p "Database development sudah ada? Timpa database tersebut? Ketik REPLACE untuk mengizinkan: " overwrite_confirm

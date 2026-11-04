@@ -8,6 +8,13 @@
       - postgresql_refresh_source_password | length > 0
       - postgresql_refresh_target_database is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
       - postgresql_refresh_target_owner is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_app_username is match('^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+      - postgresql_refresh_app_username != postgresql_refresh_target_owner
+      - postgresql_refresh_app_password | length >= 16
+      - postgresql_refresh_listen_addresses in ['localhost', '*'] or postgresql_refresh_listen_addresses is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - postgresql_refresh_app_client_cidr == '' or postgresql_refresh_app_client_cidr is match('^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$')
+      - postgresql_refresh_app_client_cidr == '' or postgresql_refresh_listen_addresses not in ['localhost', '*']
+      - postgresql_refresh_app_client_cidr | length > 0 or postgresql_refresh_listen_addresses == 'localhost'
       - postgresql_refresh_source_port | int >= 1
       - postgresql_refresh_source_port | int <= 65535
       - postgresql_refresh_target_port | int >= 1
@@ -18,6 +25,26 @@
       identifiers; ports, client version, source credentials, and SSL mode must
       be valid.
 
+- name: Validate the supplied application CIDR and PostgreSQL bind address
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import ipaddress,sys; n=ipaddress.ip_network(sys.argv[1], strict=False); a=ipaddress.ip_address(sys.argv[2]); assert n.version == 4 and a.version == 4 and n.prefixlen > 0 and not a.is_loopback and not a.is_unspecified"
+      - "{{ postgresql_refresh_app_client_cidr }}"
+      - "{{ postgresql_refresh_listen_addresses }}"
+  changed_when: false
+  when: postgresql_refresh_app_client_cidr | length > 0
+
+- name: Ensure the requested PostgreSQL bind IP is assigned to the development host
+  ansible.builtin.assert:
+    that:
+      - postgresql_refresh_listen_addresses in ansible_all_ipv4_addresses
+    fail_msg: >-
+      The requested PostgreSQL listen address is not assigned to this server.
+      Use a private interface IP configured on the development host.
+  when: postgresql_refresh_app_client_cidr | length > 0
+
 - name: Verify supported target operating system
   ansible.builtin.assert:
     that:
@@ -27,6 +54,27 @@
 
 - name: Discover RDS version and prepare matching PostgreSQL server
   ansible.builtin.import_tasks: prepare.yml
+
+- name: Remove stale Ops Toolkit managed remote pg_hba rules while listener is local
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/pg_hba.conf"
+    regexp: '^host\s+.*# managed by ops-toolkit$'
+    state: absent
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  register: postgresql_refresh_stale_hba_rules
+
+- name: Reload PostgreSQL after removing stale managed pg_hba rules
+  ansible.builtin.command:
+    argv:
+      - pg_ctlcluster
+      - "{{ postgresql_refresh_client_version }}"
+      - main
+      - reload
+  when: postgresql_refresh_stale_hba_rules.changed
+  changed_when: true
+
 
 - name: Check source RDS connectivity and read its server version
   become_user: postgres
@@ -111,6 +159,33 @@
       Target role {{ postgresql_refresh_target_owner }} does not exist on the
       development PostgreSQL server. Create the role first or choose an
       existing owner. The target database has not been modified.
+
+- name: Check whether an existing application role has elevated privileges
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_refresh_client_version }}/bin/psql"
+      - -XAt
+      - -v
+      - ON_ERROR_STOP=1
+      - -v
+      - "app_user={{ postgresql_refresh_app_username }}"
+      - -d
+      - postgres
+      - -c
+      - "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{{ postgresql_refresh_app_username }}') THEN CASE WHEN EXISTS (SELECT 1 FROM pg_roles r JOIN pg_authid a ON a.oid = r.oid WHERE r.rolname = '{{ postgresql_refresh_app_username }}' AND (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls OR COALESCE(a.rolpassword, '') NOT LIKE 'SCRAM-SHA-256$%')) OR pg_has_role('{{ postgresql_refresh_app_username }}', '{{ postgresql_refresh_target_owner }}', 'MEMBER') OR EXISTS (SELECT 1 FROM pg_roles elevated WHERE (elevated.rolsuper OR elevated.rolcreaterole OR elevated.rolcreatedb OR elevated.rolreplication OR elevated.rolbypassrls) AND pg_has_role('{{ postgresql_refresh_app_username }}', elevated.rolname, 'MEMBER')) THEN '1' ELSE '0' END ELSE '0' END;"
+  register: postgresql_refresh_app_role_privileges
+  changed_when: false
+
+- name: Reject a privileged existing application role
+  ansible.builtin.assert:
+    that:
+      - postgresql_refresh_app_role_privileges.stdout | trim == '0'
+    fail_msg: >-
+      The existing application role is privileged, has no SCRAM password, or inherits database-owner privileges.
+      Use a dedicated non-superuser login role; the target database has not
+      been modified.
+
 
 - name: Check whether target database already exists
   become_user: postgres
@@ -247,11 +322,14 @@
           - -d
           - postgres
         stdin: |
+          SET password_encryption = 'scram-sha-256';
           \getenv app_password POSTGRESQL_REFRESH_APP_PASSWORD
           SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'app_user', :'app_password')
           WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user')
           \gexec
           ALTER ROLE :"app_user" LOGIN;
+      register: postgresql_refresh_app_role_result
+      changed_when: "'CREATE ROLE' in postgresql_refresh_app_role_result.stdout"
       environment:
         POSTGRESQL_REFRESH_APP_PASSWORD: "{{ postgresql_refresh_app_password }}"
       no_log: true
@@ -268,9 +346,12 @@
           - "app_user={{ postgresql_refresh_app_username }}"
           - -v
           - "target_owner={{ postgresql_refresh_target_owner }}"
+          - -v
+          - "target_db={{ postgresql_refresh_target_database }}"
           - -d
           - "{{ postgresql_refresh_target_database }}"
         stdin: |
+          GRANT CONNECT ON DATABASE :"target_db" TO :"app_user";
           SELECT format('GRANT USAGE ON SCHEMA %I TO %I', nspname, :'app_user')
           FROM pg_namespace WHERE nspname <> 'information_schema' AND nspname NOT LIKE 'pg_%'
           \gexec
@@ -287,6 +368,37 @@
           FROM (SELECT DISTINCT n.nspname, r.rolname AS role_name FROM pg_namespace n CROSS JOIN LATERAL (VALUES ('postgres'::text), (:'target_owner'::text)) AS owners(role_name) JOIN pg_roles r ON r.rolname = owners.role_name WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%') AS d
           \gexec
       changed_when: true
+
+
+    - name: Configure remote PostgreSQL listen address after restore
+      ansible.builtin.lineinfile:
+        path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/postgresql.conf"
+        regexp: '^\s*#?\s*listen_addresses\s*='
+        line: "listen_addresses = '{{ postgresql_refresh_listen_addresses }}'"
+        owner: postgres
+        group: postgres
+        mode: "0640"
+      register: postgresql_refresh_listen_config
+      when: postgresql_refresh_app_client_cidr | length > 0
+
+    - name: Add a CIDR-restricted application rule to pg_hba.conf
+      ansible.builtin.lineinfile:
+        path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/pg_hba.conf"
+        regexp: '^host\s+{{ postgresql_refresh_target_database | regex_escape }}\s+{{ postgresql_refresh_app_username | regex_escape }}\s+.*# managed by ops-toolkit$'
+        line: "host {{ postgresql_refresh_target_database }} {{ postgresql_refresh_app_username }} {{ postgresql_refresh_app_client_cidr }} scram-sha-256 # managed by ops-toolkit"
+        owner: postgres
+        group: postgres
+        mode: "0640"
+      register: postgresql_refresh_pg_hba_rule
+      when: postgresql_refresh_app_client_cidr | length > 0
+
+    - name: Restart PostgreSQL only after both remote access rules are in place
+      ansible.builtin.service:
+        name: postgresql
+        state: restarted
+      when:
+        - postgresql_refresh_app_client_cidr | length > 0
+        - postgresql_refresh_listen_config.changed or postgresql_refresh_pg_hba_rule.changed
 
 
     - name: Report successful development database refresh
