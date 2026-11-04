@@ -148,6 +148,41 @@ The script refuses to overwrite an existing target database by default. To repla
 
 The underlying playbook can also be run directly with an inventory group named `postgresql_refresh_targets` and the variables defined in `ansible/roles/postgresql_refresh_dev/defaults/main.yml`. Keep source credentials in Ansible Vault or a protected vars file; never commit them.
 
+
+### Configure PostgreSQL application access after a refresh
+
+Use the standalone access playbook when the development database has already been
+refreshed and only its application network allowlist needs to change. This does not
+dump, drop, restore, or otherwise modify database contents.
+
+The inventory must define the `postgresql_app_access_targets` group with the
+development PostgreSQL host. For example, after creating a suitable inventory:
+
+```bash
+ansible-playbook -i /path/to/inventory.yml ansible/playbooks/postgresql-app-access.yml \
+  -e "postgresql_access_version=18" \
+  -e "postgresql_access_port=5432" \
+  -e "postgresql_access_database=racehub" \
+  -e "postgresql_access_username=racehub" \
+  -e "postgresql_access_client_cidr=172.23.0.0/16"
+```
+
+The playbook validates that the supplied CIDR is a private IPv4 network, adds or
+updates one database/user-specific `scram-sha-256` rule marked
+`managed by ops-toolkit`, reloads PostgreSQL only when the rule changes, and
+checks that PostgreSQL parses a matching rule. It does not change firewall or
+cloud security-group rules; permit the PostgreSQL port only from the trusted
+application network. Use the actual Docker network subnet, not an assumed
+container IP, and avoid broad CIDRs.
+
+**Before developer access:** a production refresh copies production data as-is.
+Review the restored data and apply application/schema-specific masking or
+anonymization to personal data, credentials, tokens, and other sensitive fields.
+There is intentionally no generic automatic masking SQL in this toolkit:
+table and column names, relationships, constraints, and application behavior
+must be reviewed before modifying data. Validate the masked result before
+granting developers access.
+
 ## Security
 
 - Never commit runner authentication tokens, registration tokens, private keys, or other secrets.
