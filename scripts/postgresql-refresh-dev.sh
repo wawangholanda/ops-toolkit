@@ -63,6 +63,10 @@ case "${1:-}" in
 esac
 
 mkdir -p -- "$config_dir"
+if [[ -L "$config_dir" ]]; then
+  echo "ERROR: Config directory tidak boleh berupa symbolic link."
+  exit 1
+fi
 chmod 700 "$config_dir"
 if [[ -L "$config_file" ]]; then
   echo "ERROR: Config file tidak boleh berupa symbolic link."
@@ -160,7 +164,12 @@ prompt_with_default app_username "Username application Development" "$app_userna
 read -r -s -p "Password application Development (tidak disimpan; dipakai hanya jika role belum ada; minimal 16 karakter): " app_password
 echo
 prompt_with_default listen_address "PostgreSQL listen address (localhost untuk akses lokal)" "$listen_address_default"
-prompt_with_default app_client_cidr "CIDR sumber aplikasi (kosong = hanya akses lokal)" "$app_client_cidr_default"
+read -r -p "CIDR sumber aplikasi [${app_client_cidr_default:-kosong}] (ketik 'none' untuk akses lokal saja): " app_client_cidr_input
+if [[ "$app_client_cidr_input" == "none" ]]; then
+  app_client_cidr=""
+else
+  app_client_cidr="${app_client_cidr_input:-$app_client_cidr_default}"
+fi
 
 [[ -n "$source_host" && -n "$source_username" && -n "$source_password" &&
    -n "$target_server" && -n "$ssh_user" && -n "$app_username" && -n "$app_password" ]] || {
