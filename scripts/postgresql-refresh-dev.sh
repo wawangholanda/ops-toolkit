@@ -15,7 +15,8 @@ auth_file=""
 secret_file=""
 inventory_file=""
 defaults_file=""
-config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/ops-toolkit/postgresql-refresh-dev"
+config_parent="${XDG_CONFIG_HOME:-$HOME/.config}/ops-toolkit"
+config_dir="$config_parent/postgresql-refresh-dev"
 config_file="$config_dir/config.json"
 
 cleanup() {
@@ -43,6 +44,10 @@ case "${1:-}" in
   "")
     ;;
   --reset-config)
+    if [[ -L "$config_parent" || -L "$config_dir" ]]; then
+      echo "ERROR: Config directory adalah symbolic link; tidak dihapus."
+      exit 1
+    fi
     if [[ -L "$config_file" ]]; then
       echo "ERROR: Config path adalah symbolic link; tidak dihapus."
       exit 1
@@ -62,8 +67,12 @@ case "${1:-}" in
     ;;
 esac
 
+if [[ -L "$config_parent" || -L "$config_dir" ]]; then
+  echo "ERROR: Config directory tidak boleh berupa symbolic link."
+  exit 1
+fi
 mkdir -p -- "$config_dir"
-if [[ -L "$config_dir" ]]; then
+if [[ -L "$config_parent" || -L "$config_dir" ]]; then
   echo "ERROR: Config directory tidak boleh berupa symbolic link."
   exit 1
 fi
