@@ -97,3 +97,12 @@
   no_log: true
   changed_when: true
   notify: Restart GitLab Runner
+- name: Ensure rootless BuildKit service AppArmor profile
+  ansible.builtin.lineinfile:
+    path: /etc/gitlab-runner/config.toml
+    regexp: '^\s*services_security_opt\s*='
+    insertafter: '^\s*privileged\s*=\s*false\s*$'
+    line: '  services_security_opt = {{ gitlab_runner_docker_services_security_opt | to_json }}'
+    state: present
+    backup: true
+  become: true
