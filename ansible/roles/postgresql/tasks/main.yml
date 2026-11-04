@@ -110,7 +110,7 @@
 
 - name: Extract selected PostgreSQL main cluster version
   ansible.builtin.set_fact:
-    postgresql_cluster_version: "{{ (postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\s+main\s+') | list | first).split()[0] }}"
+    postgresql_cluster_version: "{{ (postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\\s+main\\s+') | list | first).split()[0] }}"
   when: postgresql_clusters.stdout_lines | select('match', '^' ~ (postgresql_version | string) ~ '\s+main\s+') | list | length > 0
 
 - name: Verify selected PostgreSQL main cluster exists
