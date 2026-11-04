@@ -29,13 +29,13 @@ trap 'exit 143' TERM
 
 if [[ -z "${VIRTUAL_ENV:-}" || ! -x "$ANSIBLE_PLAYBOOK" ]]; then
   echo "ERROR: Activate the virtual environment that contains Ansible."
-  echo "Contoh: source .venv/bin/activate"
+  echo "Example: source .venv/bin/activate"
   exit 1
 fi
 
 for cmd in ssh python mktemp; do
   command -v "$cmd" >/dev/null 2>&1 || {
-    echo "ERROR: Perintah '$cmd' tidak ditemukan."
+    echo "ERROR: Required command '$cmd' was not found."
     exit 1
   }
 done
@@ -61,7 +61,7 @@ case "${1:-}" in
     exit 0
     ;;
   *)
-    echo "ERROR: Argumen tidak dikenal: $1"
+    echo "ERROR: Unknown argument: $1"
     echo "Usage: bash scripts/postgresql-refresh-dev.sh [--reset-config]"
     exit 1
     ;;
@@ -112,7 +112,7 @@ if os.path.exists(path):
 for key in keys:
     value = data.get(key, "")
     if not isinstance(value, str) or "\0" in value:
-        print(f"ERROR: Configuration value '{key}' tidak valid.", file=sys.stderr)
+        print(f"ERROR: Configuration value '{key}' is invalid.", file=sys.stderr)
         raise SystemExit(1)
     sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
 PY
@@ -186,11 +186,11 @@ fi
   exit 1
 }
 valid_identifier "$source_database" || {
-  echo "ERROR: Production database name tidak valid."
+  echo "ERROR: Production database name is invalid."
   exit 1
 }
 valid_identifier "$target_database" || {
-  echo "ERROR: Development database name tidak valid."
+  echo "ERROR: Development database name is invalid."
   exit 1
 }
 valid_identifier "$target_owner" || {
