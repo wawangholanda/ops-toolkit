@@ -268,7 +268,7 @@ elif [[ "$ssh_key_path" == "~/"* ]]; then
   ssh_key_path="$HOME/${ssh_key_path#~/}"
 fi
 
-printf '%s\\0' \
+printf '%s\0' \
   "$source_host" "$source_port" "$source_database" "$source_username" \
   "$target_server" "$ssh_user" "$target_port" "$target_database" \
   "$target_owner" "$app_username" "$listen_address" "$app_client_cidr" \
