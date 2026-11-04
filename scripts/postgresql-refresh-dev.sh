@@ -206,20 +206,25 @@ valid_identifier "$app_username" || {
   exit 1
 }
 if [[ -n "$app_client_cidr" ]]; then
-  python - "$app_client_cidr" "$listen_address" <<'PY'
+  app_client_cidr="$(python - "$app_client_cidr" "$listen_address" <<'PY'
 import ipaddress
 import sys
 try:
-    network = ipaddress.ip_network(sys.argv[1], strict=False)
+    raw = [value.strip() for value in sys.argv[1].split(",")]
+    if not raw or any(not value for value in raw):
+        raise ValueError("Empty CIDR entry")
+    networks = [ipaddress.ip_network(value, strict=False) for value in raw]
     address = ipaddress.ip_address(sys.argv[2])
-    if network.version != 4 or address.version != 4:
-        raise ValueError("IPv4 only")
-    if address.is_loopback or address.is_unspecified or network.prefixlen == 0:
-        raise ValueError("Use a specific non-loopback server IP and a non-default CIDR")
+    if address.version != 4 or address.is_loopback or address.is_unspecified:
+        raise ValueError("Invalid listen address")
+    if any(n.version != 4 or n.prefixlen == 0 for n in networks):
+        raise ValueError("Invalid CIDR")
+    print(",".join(dict.fromkeys(str(n) for n in networks)))
 except ValueError:
-    print("ERROR: The CIDR and listen address must be valid IPv4 values.")
+    print("ERROR: Every CIDR and the listen address must be valid, specific IPv4 values.", file=sys.stderr)
     raise SystemExit(1)
 PY
+)" || exit 1
   [[ "$listen_address" != "localhost" && "$listen_address" != "*" ]] || {
     echo "ERROR: For remote access, enter the server interface IP address, not localhost or *."
     exit 1
