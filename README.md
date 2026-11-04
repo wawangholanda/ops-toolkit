@@ -111,8 +111,10 @@ The quick-start remembers the last validated non-secret connection settings loca
 `~/.config/ops-toolkit/postgresql-refresh-dev/config.json` (or under
 `$XDG_CONFIG_HOME` when set). The configuration directory is restricted to mode
 `0700` and the JSON file to mode `0600`. Press Enter at a prompt to accept its
-displayed default, or enter a new value. RDS, SSH, sudo, and application passwords
-are never stored and are requested when needed on each run. To remove the saved
+displayed default, or enter a new value. At the optional application CIDR prompt, type
+`none` to clear a previously saved CIDR and return to local-only access. RDS, SSH,
+sudo, and application passwords are never stored and are requested when needed on
+each run. To remove the saved
 defaults and start with blank values, run:
 
 ```bash
