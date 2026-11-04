@@ -383,7 +383,7 @@
     - name: Add a CIDR-restricted application rule to pg_hba.conf
       ansible.builtin.lineinfile:
         path: "/etc/postgresql/{{ postgresql_refresh_client_version }}/main/pg_hba.conf"
-        regexp: '^host\\s+{{ postgresql_refresh_target_database | regex_escape }}\\s+{{ postgresql_refresh_app_username | regex_escape }}\\s+{{ item | regex_escape }}\\s+.*# managed by ops-toolkit$'
+        regexp: '^host\s+{{ postgresql_refresh_target_database | regex_escape }}\s+{{ postgresql_refresh_app_username | regex_escape }}\s+{{ item | regex_escape }}\s+.*# managed by ops-toolkit$'
         line: "host {{ postgresql_refresh_target_database }} {{ postgresql_refresh_app_username }} {{ item }} scram-sha-256 # managed by ops-toolkit"
         owner: postgres
         group: postgres
