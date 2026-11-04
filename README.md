@@ -1,228 +1,80 @@
 # Ops Toolkit
 
-A growing collection of reusable DevOps scripts and infrastructure automation tools.
+A collection of reusable **Bash tools and Ansible automation for DevOps operations**.
 
-This project starts with GitLab Runner lifecycle management, providing scripts to simplify runner registration and unregistration. The long-term goal is to build a practical toolkit for Linux system administration, CI/CD operations, and infrastructure automation.
+This repository brings common infrastructure and operational tasks into repeatable command-line workflows. The tools currently cover GitLab Runner management, Redis and PostgreSQL installation, and PostgreSQL development database operations.
 
-## Current Features
+The project is intended as a practical, evolving toolkit for Linux administration, CI/CD operations, and infrastructure automation.
 
-- **GitLab Runner Registration** — automate the runner registration workflow.
-- **GitLab Runner Unregistration** — simplify the runner unregistration workflow.
-- **Redis Installation** — install and configure Redis on Debian and Ubuntu hosts using Ansible.
-- **PostgreSQL Installation** — install and configure PostgreSQL on Debian and Ubuntu hosts using Ansible.
+## Available tools
 
-## Requirements
+| Tool | Purpose | Documentation |
+| --- | --- | --- |
+| `gitlab-runner-reg.sh` | Register and configure a GitLab Runner on a remote host. | [gitlab-runner-reg.md](docs/gitlab-runner-reg.md) |
+| `gitlab-runner-unreg.sh` | List runners or unregister a selected runner. | [gitlab-runner-unreg.md](docs/gitlab-runner-unreg.md) |
+| `redis-install.sh` | Install and configure Redis on Debian/Ubuntu. | [redis-install.md](docs/redis-install.md) |
+| `postgresql-install.sh` | Install a selected PostgreSQL major version. | [postgresql-install.md](docs/postgresql-install.md) |
+| `postgresql-refresh-dev.sh` | Refresh a development database from AWS RDS PostgreSQL. | [postgresql-refresh-dev.md](docs/postgresql-refresh-dev.md) |
 
-- Linux environment with Bash, Python 3, and SSH client.
-- Ansible installed in a Python virtual environment (see `requirements.txt`).
-- `sshpass` on the control machine only when using SSH password authentication.
-- GitLab Runner installed on the target system, where required by the GitLab Runner management scripts.
-- Network access to the relevant package repositories and GitLab instance.
-- Appropriate SSH and sudo permissions on target hosts.
+Additional Ansible workflow:
 
-See each script's usage instructions for its exact requirements.
+- [PostgreSQL application access](docs/postgresql-app-access.md) — configure restricted network access for an existing database without refreshing its data.
 
-## Getting Started
+## Getting started
 
 Clone the repository:
 
 ```bash
-git clone git@github.com:wawangholanda/ops-toolkit.git
+git clone https://github.com/wawangholanda/ops-toolkit.git
 cd ops-toolkit
 ```
 
-Review the scripts and their usage instructions before execution. Use the appropriate command-line options and configuration supported by each script.
-
-### Redis installation
-
-The Redis role targets Debian and Ubuntu systems using APT. It does not pin a fixed list of OS release numbers; actual compatibility depends on the target's Python version, the installed Ansible version, and the availability of APT repositories.
-
-Activate the project's Ansible virtual environment, then run:
+Most quick-start scripts use the repository's Ansible virtual environment:
 
 ```bash
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Then run the required script from the repository root, for example:
+
+```bash
 bash scripts/redis-install.sh
 ```
 
-The quick-start prompts for the target host, SSH user, Redis port, optional Redis password, and SSH authentication details. It uses a temporary inventory and a mode-0600 temporary variables file; both are removed when the script exits.
+Each tool has its own prerequisites, prompts, configuration options, and operational impact. **Read its documentation in the `docs/` directory before running it**, especially for workflows that modify infrastructure or database contents.
 
-Defaults:
-- Redis listens on `127.0.0.1:6379` by default. The quick-start lets you choose localhost, a private server IP, a custom IPv4 address, or `0.0.0.0` (all interfaces).
-- A selected specific IP must already be assigned to the target host; the Ansible role validates this before configuring Redis.
-- Protected mode remains enabled.
-- Redis starts now and is enabled at boot.
-- A Redis password is optional; supply one when the service needs authentication.
-- No reboot is performed.
+## Repository layout
 
-For advanced configuration, edit the Redis role variables in `ansible/roles/redis/defaults/main.yml` or pass overrides through a protected Ansible vars file. Do not commit passwords.
-
-The playbook can also be run directly:
-
-```bash
-ansible-playbook -i ansible/inventory/dev/hosts.yml ansible/playbooks/redis.yml
+```text
+ops-toolkit/
+├── ansible/       # Ansible playbooks, roles, and inventory examples
+├── docs/          # Per-tool usage and operational documentation
+├── scripts/       # Bash quick-start and operational scripts
+├── assets/        # Project assets
+├── requirements.txt
+└── README.md
 ```
 
-The inventory must define hosts in the `redis_servers` group.
+## Operational principles
 
-### PostgreSQL installation
+- Review the target host and requested operation before confirming execution.
+- Prefer least-privilege SSH and sudo access.
+- Keep passwords, tokens, private keys, and production data out of Git.
+- Use narrow network allowlists; do not expose infrastructure services directly to the Internet.
+- Understand destructive actions and their recovery implications before proceeding.
 
-The PostgreSQL role installs a specifically selected major version from the official PostgreSQL Global Development Group (PGDG) APT repository. The quick-start currently offers PostgreSQL 15, 16, 17, and 18, with 18 as the default. Versioned packages are used (for example, `postgresql-18` and `postgresql-client-18`) rather than the moving `postgresql` meta-package.
+## Project philosophy
 
-PGDG repository setup follows the official PostgreSQL instructions and uses the repository signing key with APT's `Signed-By` option. Repository availability depends on the target Debian/Ubuntu release and CPU architecture; check the [official Debian](https://www.postgresql.org/download/linux/debian/) and [Ubuntu](https://www.postgresql.org/download/linux/ubuntu/) support lists before deployment.
+Tools should be practical, reusable, clearly documented, and safe to run repeatedly where applicable. Each tool's detailed usage guide and limitations are maintained separately in [`docs/`](docs/).
 
-Activate the project's Ansible virtual environment, then run:
+## Support the project
 
-```bash
-source .venv/bin/activate
-bash scripts/postgresql-install.sh
-```
+If this toolkit is useful for your DevOps learning or infrastructure work, you can support its continued development.
 
-The quick-start prompts for the target host, SSH user, PostgreSQL major version, port, listen address, and SSH authentication details. It creates temporary inventory and mode-0600 variables files and removes them on exit.
-
-Defaults:
-- PostgreSQL listens on `localhost:5432` (local connections only).
-- You can select localhost, a private server IP, a custom IPv4 address, or `*` (all interfaces).
-- A selected specific IPv4 address must already be assigned to the target host.
-- The role configures the selected major version's `main` cluster, enables and starts PostgreSQL, and verifies readiness plus the responding server major version.
-- No database user or password is created, no `pg_hba.conf` rules are modified, and no reboot is performed.
-
-**Important:** changing `listen_addresses` alone does not grant remote database access. Remote clients also need an intentional `pg_hba.conf` rule, appropriate authentication, and a firewall rule restricted to trusted source addresses. Do not expose PostgreSQL directly to the Internet.
-
-For advanced configuration, edit `ansible/roles/postgresql/defaults/main.yml` or pass overrides through a protected Ansible vars file. For example, set `postgresql_version: "17"` to select PostgreSQL 17.
-
-The playbook can also be run directly:
-
-```bash
-ansible-playbook -i /path/to/inventory.yml ansible/playbooks/postgresql.yml
-```
-
-The inventory must define hosts in the `postgresql_servers` group.
-
-### PostgreSQL production-to-development refresh
-
-To refresh a development database from an AWS RDS PostgreSQL database, run this workflow directly; a separate PostgreSQL installation step is not required:
-
-```bash
-source .venv/bin/activate
-bash scripts/postgresql-refresh-dev.sh
-```
-
-The quick-start remembers the last validated non-secret connection settings locally in
-`~/.config/ops-toolkit/postgresql-refresh-dev/config.json` (or under
-`$XDG_CONFIG_HOME` when set). The configuration directory is restricted to mode
-`0700` and the JSON file to mode `0600`. Press Enter at a prompt to accept its
-displayed default, or enter a new value. At the optional application CIDR prompt, type
-`none` to clear a previously saved CIDR and return to local-only access. RDS, SSH,
-sudo, and application passwords are never stored and are requested when needed on
-each run. To remove the saved
-defaults and start with blank values, run:
-
-```bash
-bash scripts/postgresql-refresh-dev.sh --reset-config
-```
-
-The refresh workflow:
-- Connects from the development host to the RDS source using PostgreSQL SSL (`sslmode=require` by default).
-- Installs the PostgreSQL 18 client as a bootstrap tool, then discovers the actual RDS server major version using `SHOW server_version_num`.
-- Supports RDS PostgreSQL major versions 15, 16, 17, and 18. Unsupported versions stop before modifying the target database.
-- Automatically installs/prepares the matching PostgreSQL server and client major version on Development. Other installed PostgreSQL major versions are left in place; packages and clusters are not automatically uninstalled or deleted.
-- Checks source, target, and client major-version compatibility before dumping.
-- Creates a temporary custom-format dump on the development host, then restores it into the development database.
-- Uses `--no-owner` and `--no-acl`; restored objects are owned by the PostgreSQL restore account, while the database itself is owned by the selected target database owner.
-- Prompts for a separate Development application username and password. If the role does not exist, it is created as a login role; if it already exists, its password is preserved.
-- Grants the application role `USAGE` on every non-system schema, CRUD access to existing tables, and sequence access. Default privileges are configured for objects created by the PostgreSQL restore account and the selected database owner. This is a runtime application role; use a separate migration/owner account for schema changes that require `CREATE` privileges.
-- Keeps PostgreSQL bound to `localhost` by default. For remote application access, optionally enter the server's private interface IP and the application's trusted IPv4 CIDR; the workflow first keeps PostgreSQL local during the restore, then binds it to that IP and adds a database/user/CIDR-specific `scram-sha-256` rule to `pg_hba.conf`. Previously managed remote rules are removed before each refresh so a changed or omitted CIDR does not leave an old managed rule behind.
-- Removes the temporary dump directory after the workflow, including when a task fails.
-- Never changes the RDS source, application endpoints, or production infrastructure.
-
-Before running:
-- Allow the development host's outbound connection to the RDS endpoint and allow its private/public egress IP in the RDS security group on the database port.
-- Ensure the RDS user can connect to the selected database and read all objects/data required by `pg_dump`.
-- The requested target port must be free for the matching PostgreSQL cluster. If another PostgreSQL cluster already owns that port, the installer stops safely; choose another target port or resolve the conflict manually. Existing clusters and data are not automatically removed.
-- Install required PostgreSQL extensions on the development host before restoring. Extension availability and RDS-specific features should be checked separately.
-- The target database owner role must already exist on the development server. The application username must be different from the database owner, and its password must be at least 16 characters. Existing application roles keep their existing password; the supplied password is used only when the role is created. Existing roles must already have a SCRAM-SHA-256 password and must not be privileged or members of the database-owner role; otherwise the workflow stops before replacing the target database.
-- Remote access is optional and remains disabled by default. If enabled, provide the PostgreSQL server's private interface IP and a narrow application source CIDR. Also allow the PostgreSQL port from that CIDR in the host firewall and cloud/network security group yourself; this workflow does not change firewall or AWS security-group rules. Use a private network or VPN and configure PostgreSQL TLS when the network path requires transport encryption; SCRAM authentication alone does not encrypt traffic.
-- The temporary dump contains production data. The temporary directory is restricted to the PostgreSQL OS account, but use encrypted storage and protect the development host appropriately.
-
-The script refuses to overwrite an existing target database by default. To replace it, explicitly type `REPLACE` at the prompt. The dump is completed before an existing target database is dropped. If restore fails after replacement begins, the development database may be left partially restored; the RDS source remains untouched. Review and mask personal or sensitive production data before allowing developer access.
-
-The underlying playbook can also be run directly with an inventory group named `postgresql_refresh_targets` and the variables defined in `ansible/roles/postgresql_refresh_dev/defaults/main.yml`. Keep source credentials in Ansible Vault or a protected vars file; never commit them.
-
-
-### Configure PostgreSQL application access after a refresh
-
-Use the standalone access playbook when the development database has already been
-refreshed and only its application network allowlist needs to change. This does not
-dump, drop, restore, or otherwise modify database contents.
-
-The inventory must define the `postgresql_app_access_targets` group with the
-development PostgreSQL host. For example, after creating a suitable inventory:
-
-```bash
-ansible-playbook -i /path/to/inventory.yml ansible/playbooks/postgresql-app-access.yml \
-  -e "postgresql_access_version=18" \
-  -e "postgresql_access_port=5432" \
-  -e "postgresql_access_database=racehub" \
-  -e "postgresql_access_username=racehub" \
-  -e "postgresql_access_client_cidr=172.23.0.0/16"
-```
-
-The playbook validates that the supplied CIDR is a private IPv4 network, adds or
-updates one database/user-specific `scram-sha-256` rule marked
-`managed by ops-toolkit`, reloads PostgreSQL only when the rule changes, and
-checks that PostgreSQL parses a matching rule. It does not change firewall or
-cloud security-group rules; permit the PostgreSQL port only from the trusted
-application network. Use the actual Docker network subnet, not an assumed
-container IP, and avoid broad CIDRs.
-
-**Before developer access:** a production refresh copies production data as-is.
-Review the restored data and apply application/schema-specific masking or
-anonymization to personal data, credentials, tokens, and other sensitive fields.
-There is intentionally no generic automatic masking SQL in this toolkit:
-table and column names, relationships, constraints, and application behavior
-must be reviewed before modifying data. Validate the masked result before
-granting developers access.
-
-## Security
-
-- Never commit runner authentication tokens, registration tokens, private keys, or other secrets.
-- Avoid placing credentials directly in shell scripts or command history.
-- Use least-privilege access wherever possible.
-- Verify the target GitLab instance and runner before registering or unregistering a runner.
-
-## Roadmap
-
-- [ ] Document registration and unregistration workflows with tested examples.
-- [ ] Add input validation and clearer error handling.
-- [ ] Add shell linting and automated tests.
-- [ ] Add runner status and health-check utilities.
-- [ ] Expand the collection with reusable DevOps automation.
-
-## Project Philosophy
-
-Tools should be practical, reusable, documented, and safe to run repeatedly where applicable.
-
-## Support the Project
-
-If this project helps you learn Platform Engineering, build your own
-infrastructure laboratory, or explore Kubernetes automation, you can
-support its continued development.
-
-### 🇮🇩 Indonesia
-
-Support via QRIS:
-
-![QRIS support](assets/qris.png)
-
-Scan the QRIS code to support the project.
-
-### 🌎 International
-
-International supporters can use Ko-fi:
-
-[☕ Support via Ko-fi](https://ko-fi.com/wawangholanda)
-
-Thank you for supporting open-source learning and continued development of the project.
+- **Indonesia:** scan the QRIS code in [`assets/qris.png`](assets/qris.png).
+- **International:** [Support via Ko-fi](https://ko-fi.com/wawangholanda).
 
 ## License
 
