@@ -10,15 +10,15 @@ The project is intended as a practical, evolving toolkit for Linux administratio
 
 | Tool | Purpose | Documentation |
 | --- | --- | --- |
-| `gitlab-runner-reg.sh` | Register and configure a GitLab Runner on a remote host. | [gitlab-runner-reg.md](docs/gitlab-runner-reg.md) |
-| `gitlab-runner-unreg.sh` | List runners or unregister a selected runner. | [gitlab-runner-unreg.md](docs/gitlab-runner-unreg.md) |
-| `redis-install.sh` | Install and configure Redis on Debian/Ubuntu. | [redis-install.md](docs/redis-install.md) |
-| `postgresql-install.sh` | Install a selected PostgreSQL major version. | [postgresql-install.md](docs/postgresql-install.md) |
-| `postgresql-refresh-dev.sh` | Refresh a development database from AWS RDS PostgreSQL. | [postgresql-refresh-dev.md](docs/postgresql-refresh-dev.md) |
+| `gitlab-runner-reg.sh` | Register and configure a GitLab Runner on a remote host. | [gitlab-runner-reg.md](doc/gitlab-runner-reg.md) |
+| `gitlab-runner-unreg.sh` | List runners or unregister a selected runner. | [gitlab-runner-unreg.md](doc/gitlab-runner-unreg.md) |
+| `redis-install.sh` | Install and configure Redis on Debian/Ubuntu. | [redis-install.md](doc/redis-install.md) |
+| `postgresql-install.sh` | Install a selected PostgreSQL major version. | [postgresql-install.md](doc/postgresql-install.md) |
+| `postgresql-refresh-dev.sh` | Refresh a development database from AWS RDS PostgreSQL. | [postgresql-refresh-dev.md](doc/postgresql-refresh-dev.md) |
 
 Additional Ansible workflow:
 
-- [PostgreSQL application access](docs/postgresql-app-access.md) — configure restricted network access for an existing database without refreshing its data.
+- [PostgreSQL application access](doc/postgresql-app-access.md) — configure restricted network access for an existing database without refreshing its data.
 
 ## Getting started
 
@@ -43,14 +43,14 @@ Then run the required script from the repository root, for example:
 bash scripts/redis-install.sh
 ```
 
-Each tool has its own prerequisites, prompts, configuration options, and operational impact. **Read its documentation in the `docs/` directory before running it**, especially for workflows that modify infrastructure or database contents.
+Each tool has its own prerequisites, prompts, configuration options, and operational impact. **Read its documentation in the `doc/` directory before running it**, especially for workflows that modify infrastructure or database contents.
 
 ## Repository layout
 
 ```text
 ops-toolkit/
 ├── ansible/       # Ansible playbooks, roles, and inventory examples
-├── docs/          # Per-tool usage and operational documentation
+├── doc/          # Per-tool usage and operational documentation
 ├── scripts/       # Bash quick-start and operational scripts
 ├── assets/        # Project assets
 ├── requirements.txt
@@ -67,7 +67,7 @@ ops-toolkit/
 
 ## Project philosophy
 
-Tools should be practical, reusable, clearly documented, and safe to run repeatedly where applicable. Each tool's detailed usage guide and limitations are maintained separately in [`docs/`](docs/).
+Tools should be practical, reusable, clearly documented, and safe to run repeatedly where applicable. Each tool's detailed usage guide and limitations are maintained separately in [`doc/`](doc/).
 
 ## Support the project
 
