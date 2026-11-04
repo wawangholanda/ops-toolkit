@@ -28,7 +28,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 if [[ -z "${VIRTUAL_ENV:-}" || ! -x "$ANSIBLE_PLAYBOOK" ]]; then
-  echo "ERROR: Aktifkan virtual environment yang berisi Ansible."
+  echo "ERROR: Activate the virtual environment that contains Ansible."
   echo "Contoh: source .venv/bin/activate"
   exit 1
 fi
@@ -45,19 +45,19 @@ case "${1:-}" in
     ;;
   --reset-config)
     if [[ -L "$config_parent" || -L "$config_dir" ]]; then
-      echo "ERROR: Config directory adalah symbolic link; tidak dihapus."
+      echo "ERROR: The config directory is a symbolic link; it will not be removed."
       exit 1
     fi
     if [[ -L "$config_file" ]]; then
-      echo "ERROR: Config path adalah symbolic link; tidak dihapus."
+      echo "ERROR: The config path is a symbolic link; it will not be removed."
       exit 1
     fi
     rm -f -- "$config_file"
-    echo "Konfigurasi tersimpan direset. Nilai berikutnya akan diminta ulang."
+    echo "Saved configuration has been reset. You will be prompted for the values again."
     ;;
   --help|-h)
     echo "Usage: bash scripts/postgresql-refresh-dev.sh [--reset-config]"
-    echo "  --reset-config  Hapus konfigurasi non-rahasia yang tersimpan, lalu mulai dari awal."
+    echo "  --reset-config  Remove saved non-secret configuration and start again."
     exit 0
     ;;
   *)
@@ -68,17 +68,17 @@ case "${1:-}" in
 esac
 
 if [[ -L "$config_parent" || -L "$config_dir" ]]; then
-  echo "ERROR: Config directory tidak boleh berupa symbolic link."
+  echo "ERROR: The config directory must not be a symbolic link."
   exit 1
 fi
 mkdir -p -- "$config_dir"
 if [[ -L "$config_parent" || -L "$config_dir" ]]; then
-  echo "ERROR: Config directory tidak boleh berupa symbolic link."
+  echo "ERROR: The config directory must not be a symbolic link."
   exit 1
 fi
 chmod 700 "$config_dir"
 if [[ -L "$config_file" ]]; then
-  echo "ERROR: Config file tidak boleh berupa symbolic link."
+  echo "ERROR: The config file must not be a symbolic link."
   exit 1
 fi
 
@@ -105,14 +105,14 @@ if os.path.exists(path):
             raise ValueError("unsupported configuration format")
         data = loaded
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"ERROR: Konfigurasi tersimpan tidak valid: {exc}", file=sys.stderr)
-        print("Periksa file atau jalankan dengan --reset-config.", file=sys.stderr)
+        print(f"ERROR: Saved configuration is invalid: {exc}", file=sys.stderr)
+        print("Check the file or run with --reset-config.", file=sys.stderr)
         raise SystemExit(1)
 
 for key in keys:
     value = data.get(key, "")
     if not isinstance(value, str) or "\0" in value:
-        print(f"ERROR: Nilai konfigurasi '{key}' tidak valid.", file=sys.stderr)
+        print(f"ERROR: Configuration value '{key}' tidak valid.", file=sys.stderr)
         raise SystemExit(1)
     sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
 PY
@@ -154,26 +154,26 @@ valid_port() {
 
 echo "=== Refresh Development PostgreSQL from Production ==="
 echo
-echo "Sumber production hanya dibaca. Tidak ada perubahan atau cutover ke RDS."
+echo "The Production source is read-only. No changes or cutover will be made to RDS."
 echo
 
 prompt_with_default source_host "RDS endpoint/hostname" "$source_host_default"
 prompt_with_default source_port "RDS port" "$source_port_default"
-prompt_with_default source_database "Nama database production" "$source_database_default"
-prompt_with_default source_username "Username database RDS" "$source_username_default"
-read -r -s -p "Password database RDS (tidak disimpan): " source_password
+prompt_with_default source_database "Production database name" "$source_database_default"
+prompt_with_default source_username "RDS database username" "$source_username_default"
+read -r -s -p "RDS database password (not saved): " source_password
 echo
 
-prompt_with_default target_server "IP/hostname server PostgreSQL development" "$target_server_default"
-prompt_with_default ssh_user "Username SSH server development" "$ssh_user_default"
-prompt_with_default target_port "Port PostgreSQL development" "$target_port_default"
-prompt_with_default target_database "Nama database development" "${target_database_default:-$source_database}"
-prompt_with_default target_owner "Owner database development" "$target_owner_default"
-prompt_with_default app_username "Username application Development" "$app_username_default"
-read -r -s -p "Password application Development (tidak disimpan; dipakai hanya jika role belum ada; minimal 16 karakter): " app_password
+prompt_with_default target_server "Development PostgreSQL server IP/hostname" "$target_server_default"
+prompt_with_default ssh_user "Development server SSH username" "$ssh_user_default"
+prompt_with_default target_port "Development PostgreSQL port" "$target_port_default"
+prompt_with_default target_database "Development database name" "${target_database_default:-$source_database}"
+prompt_with_default target_owner "Development database owner" "$target_owner_default"
+prompt_with_default app_username "Development application username" "$app_username_default"
+read -r -s -p "Development application password (not saved; used only if the role does not exist; at least 16 characters): " app_password
 echo
-prompt_with_default listen_address "PostgreSQL listen address (localhost untuk akses lokal)" "$listen_address_default"
-read -r -p "CIDR sumber aplikasi [${app_client_cidr_default:-kosong}] (ketik 'none' untuk akses lokal saja): " app_client_cidr_input
+prompt_with_default listen_address "PostgreSQL listen address (use localhost for local access)" "$listen_address_default"
+read -r -p "Application source CIDR [${app_client_cidr_default:-blank}] (enter 'none' for local-only access): " app_client_cidr_input
 if [[ "$app_client_cidr_input" == "none" ]]; then
   app_client_cidr=""
 else
@@ -182,27 +182,27 @@ fi
 
 [[ -n "$source_host" && -n "$source_username" && -n "$source_password" &&
    -n "$target_server" && -n "$ssh_user" && -n "$app_username" && -n "$app_password" ]] || {
-  echo "ERROR: Semua field koneksi wajib diisi."
+  echo "ERROR: All connection fields are required."
   exit 1
 }
 valid_identifier "$source_database" || {
-  echo "ERROR: Nama database production tidak valid."
+  echo "ERROR: Production database name tidak valid."
   exit 1
 }
 valid_identifier "$target_database" || {
-  echo "ERROR: Nama database development tidak valid."
+  echo "ERROR: Development database name tidak valid."
   exit 1
 }
 valid_identifier "$target_owner" || {
-  echo "ERROR: Nama owner database tidak valid."
+  echo "ERROR: Invalid database owner name."
   exit 1
 }
 valid_identifier "$app_username" || {
-  echo "ERROR: Username application tidak valid."
+  echo "ERROR: Invalid application username."
   exit 1
 }
 [[ "${#app_password}" -ge 16 ]] || {
-  echo "ERROR: Password application minimal 16 karakter."
+  echo "ERROR: The application password must be at least 16 characters."
   exit 1
 }
 if [[ -n "$app_client_cidr" ]]; then
@@ -217,64 +217,64 @@ try:
     if address.is_loopback or address.is_unspecified or network.prefixlen == 0:
         raise ValueError("Use a specific non-loopback server IP and a non-default CIDR")
 except ValueError:
-    print("ERROR: CIDR dan listen address harus IPv4 yang valid.")
+    print("ERROR: The CIDR and listen address must be valid IPv4 values.")
     raise SystemExit(1)
 PY
   [[ "$listen_address" != "localhost" && "$listen_address" != "*" ]] || {
-    echo "ERROR: Untuk akses remote, masukkan IP interface server, bukan localhost atau *."
+    echo "ERROR: For remote access, enter the server interface IP address, not localhost or *."
     exit 1
   }
 else
   [[ "$listen_address" == "localhost" ]] || {
-    echo "ERROR: Listen address non-local membutuhkan CIDR sumber aplikasi."
+    echo "ERROR: A non-local listen address requires an application source CIDR."
     exit 1
   }
 fi
 [[ "$app_username" != "$target_owner" ]] || {
-  echo "ERROR: Application user harus berbeda dari database owner agar hak aksesnya tetap terpisah."
+  echo "ERROR: The application user must differ from the database owner to keep privileges separate."
   exit 1
 }
 valid_port "$source_port" && valid_port "$target_port" || {
-  echo "ERROR: Port harus berupa angka antara 1 dan 65535."
+  echo "ERROR: Ports must be numbers between 1 and 65535."
   exit 1
 }
 if [[ ! "$source_host" =~ ^[a-zA-Z0-9.-]+$ ||
       ! "$target_server" =~ ^[a-zA-Z0-9._:-]+$ ||
       ! "$ssh_user" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-  echo "ERROR: Format hostname, server, atau username tidak valid."
+  echo "ERROR: Invalid hostname, server, or username format."
   exit 1
 fi
 
 echo
-echo "Ringkasan:"
+echo "Summary:"
 echo "  Source : $source_database @ $source_host:$source_port (RDS)"
 echo "  Target : $target_database @ $target_server:$target_port"
 echo "  Owner  : $target_owner"
 echo "  App user: $app_username"
 echo "  App network: ${app_client_cidr:-local only}"
 echo "  Listen address: $listen_address"
-echo "  App password: hanya digunakan jika role belum ada; password role existing tidak diubah."
+echo "  App password: used only if the role does not exist; an existing role's password is not changed."
 echo
-echo "Catatan:"
-echo "- Versi RDS akan dideteksi otomatis; PostgreSQL server/client yang sesuai akan disiapkan pada Development."
-echo "- Versi PostgreSQL lain yang sudah terpasang tidak akan dihapus otomatis."
-echo "- Server development harus dapat menjangkau endpoint RDS pada port $source_port."
-echo "- Security Group RDS harus mengizinkan koneksi dari server development."
-echo "- Akses aplikasi remote hanya dibuka untuk CIDR yang dimasukkan; firewall/security group Development tetap perlu diatur manual."
-echo "- SSL RDS menggunakan sslmode=require."
-echo "- Restore menggunakan --no-owner dan --no-acl; object dimiliki OS role postgres, sedangkan database dimiliki target owner."
-echo "- Pastikan extension yang dipakai production tersedia pada server development."
+echo "Notes:"
+echo "- The RDS version will be detected automatically; the matching PostgreSQL server/client will be prepared on Development."
+echo "- Other installed PostgreSQL versions will not be removed automatically."
+echo "- The Development server must be able to reach the RDS endpoint on port $source_port."
+echo "- The RDS security group must allow connections from the Development server."
+echo "- Remote application access will be limited to the supplied CIDR; configure the Development firewall/security group separately."
+echo "- RDS connections use sslmode=require."
+echo "- The restore uses --no-owner and --no-acl; objects are owned by the postgres OS role, while the database is owned by the target owner."
+echo "- Ensure that extensions used in Production are available on the Development server."
 echo
-read -r -p "Database development sudah ada? Timpa database tersebut? Ketik REPLACE untuk mengizinkan: " overwrite_confirm
+read -r -p "Does the Development database already exist? Replace it? Type REPLACE to authorize: " overwrite_confirm
 overwrite_target=false
 if [[ "$overwrite_confirm" == "REPLACE" ]]; then
   overwrite_target=true
 fi
 
 echo
-read -r -p "Lanjutkan proses refresh? [y/N] " confirm
+read -r -p "Continue with the refresh? [y/N] " confirm
 [[ "$confirm" =~ ^[Yy]$ ]] || {
-  echo "Dibatalkan."
+  echo "Cancelled."
   exit 0
 }
 
@@ -308,7 +308,7 @@ if raw_values and raw_values[-1] == b"":
     raw_values.pop()
 values = [item.decode("utf-8") for item in raw_values]
 if len(values) != len(keys):
-    raise SystemExit("ERROR: Jumlah nilai konfigurasi tidak sesuai.")
+    raise SystemExit("ERROR: The number of configuration values is incorrect.")
 data = {"schema_version": 1, **dict(zip(keys, values))}
 directory = os.path.dirname(sys.argv[1])
 fd, temporary_path = tempfile.mkstemp(prefix=".config.", dir=directory, text=True)
@@ -327,40 +327,40 @@ except Exception:
     raise
 ' "$config_file"
 
-echo "Konfigurasi non-rahasia tersimpan di: $config_file"
+echo "Non-secret configuration saved to: $config_file"
 
 ssh_target="$ssh_user@$target_server"
 ssh_auth="password"
 if [[ -f "$ssh_key_path" && -r "$ssh_key_path" ]] &&
    ssh -i "$ssh_key_path" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 "$ssh_target" true; then
   ssh_auth="key"
-  echo "SSH key berhasil."
-  read -r -s -p "Password sudo untuk $ssh_user: " sudo_password
+  echo "SSH key authentication succeeded."
+  read -r -s -p "Sudo password for $ssh_user: " sudo_password
   echo
 else
-  echo "SSH key tidak tersedia atau gagal; menggunakan password SSH."
+  echo "SSH key is unavailable or authentication failed; falling back to SSH password authentication."
   command -v sshpass >/dev/null 2>&1 || {
-    echo "ERROR: sshpass belum terpasang. Debian/Ubuntu/Kali: sudo apt install sshpass"
+    echo "ERROR: sshpass is not installed. Debian/Ubuntu/Kali: sudo apt install sshpass"
     exit 1
   }
-  read -r -s -p "Password SSH (juga digunakan untuk sudo): " ssh_password
+  read -r -s -p "SSH password (also used for sudo): " ssh_password
   echo
   [[ -n "$ssh_password" ]] || {
-    echo "ERROR: Password SSH tidak boleh kosong."
+    echo "ERROR: SSH password cannot be empty."
     exit 1
   }
   auth_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-ssh.XXXXXX")"
   chmod 600 "$auth_file"
   printf '%s\n' "$ssh_password" > "$auth_file"
   sshpass -f "$auth_file" ssh -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o ConnectTimeout=8 "$ssh_target" true || {
-    echo "ERROR: Login SSH gagal."
+    echo "ERROR: SSH login failed."
     exit 1
   }
   sudo_password="$ssh_password"
 fi
 
 [[ -n "$sudo_password" ]] || {
-  echo "ERROR: Password sudo tidak boleh kosong."
+  echo "ERROR: Sudo password cannot be empty."
   exit 1
 }
 
@@ -423,12 +423,12 @@ else
 fi
 
 echo
-echo "Memeriksa sintaks playbook..."
+echo "Checking playbook syntax..."
 "$ANSIBLE_PLAYBOOK" -i "$inventory_file" "$PLAYBOOK" --syntax-check
 
 echo
-echo "Menjalankan refresh. Dump sementara dibuat di server development dan dihapus setelah proses."
+echo "Starting the refresh. A temporary dump will be created on the Development server and removed when the process finishes."
 "$ANSIBLE_PLAYBOOK" -i "$inventory_file" "$PLAYBOOK" --extra-vars "@$secret_file" "${ansible_args[@]}"
 
 echo
-echo "Refresh selesai. Periksa hasil validasi dan lakukan masking data sensitif sebelum database dipakai developer."
+echo "Refresh completed. Review the validation results and mask sensitive data before making the database available to developers."
