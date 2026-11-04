@@ -107,6 +107,20 @@ source .venv/bin/activate
 bash scripts/postgresql-refresh-dev.sh
 ```
 
+The quick-start remembers the last validated non-secret connection settings locally in
+`~/.config/ops-toolkit/postgresql-refresh-dev/config.json` (or under
+`$XDG_CONFIG_HOME` when set). The configuration directory is restricted to mode
+`0700` and the JSON file to mode `0600`. Press Enter at a prompt to accept its
+displayed default, or enter a new value. At the optional application CIDR prompt, type
+`none` to clear a previously saved CIDR and return to local-only access. RDS, SSH,
+sudo, and application passwords are never stored and are requested when needed on
+each run. To remove the saved
+defaults and start with blank values, run:
+
+```bash
+bash scripts/postgresql-refresh-dev.sh --reset-config
+```
+
 The refresh workflow:
 - Connects from the development host to the RDS source using PostgreSQL SSL (`sslmode=require` by default).
 - Installs the PostgreSQL 18 client as a bootstrap tool, then discovers the actual RDS server major version using `SHOW server_version_num`.
