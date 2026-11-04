@@ -285,7 +285,10 @@ keys = [
     "target_owner", "app_username", "listen_address", "app_client_cidr",
     "ssh_key_path",
 ]
-values = [item.decode("utf-8") for item in sys.stdin.buffer.read().split(b"\\0") if item]
+raw_values = sys.stdin.buffer.read().split(b"\0")
+if raw_values and raw_values[-1] == b"":
+    raw_values.pop()
+values = [item.decode("utf-8") for item in raw_values]
 if len(values) != len(keys):
     raise SystemExit("ERROR: Jumlah nilai konfigurasi tidak sesuai.")
 data = {"schema_version": 1, **dict(zip(keys, values))}
@@ -295,7 +298,7 @@ try:
     os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2)
-        handle.write("\\n")
+        handle.write("\n")
     os.replace(temporary_path, sys.argv[1])
     os.chmod(sys.argv[1], 0o600)
 except Exception:
