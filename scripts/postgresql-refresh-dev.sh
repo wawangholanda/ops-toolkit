@@ -19,6 +19,10 @@ config_parent="${XDG_CONFIG_HOME:-$HOME/.config}/ops-toolkit"
 config_dir="$config_parent/postgresql-refresh-dev"
 config_file="$config_dir/config.json"
 last_password_file="$config_dir/rds-password"
+app_password_file="$config_dir/app-password"
+ssh_password_file="$config_dir/ssh-password"
+sudo_password_file="$config_dir/sudo-password"
+password_files=("$last_password_file" "$app_password_file" "$ssh_password_file" "$sudo_password_file")
 
 cleanup() {
   rm -f -- "${auth_file:-}" "${secret_file:-}" "${inventory_file:-}" "${defaults_file:-}"
@@ -49,16 +53,22 @@ case "${1:-}" in
       echo "ERROR: The config directory is a symbolic link; it will not be removed."
       exit 1
     fi
-    if [[ -L "$config_file" || -L "$last_password_file" ]]; then
-      echo "ERROR: A saved configuration path is a symbolic link; it will not be removed."
+    if [[ -L "$config_file" ]]; then
+      echo "ERROR: The config file is a symbolic link; it will not be removed."
       exit 1
     fi
-    rm -f -- "$config_file" "$last_password_file"
+    for password_file in "${password_files[@]}"; do
+      if [[ -L "$password_file" ]]; then
+        echo "ERROR: A saved password path is a symbolic link; it will not be removed."
+        exit 1
+      fi
+    done
+    rm -f -- "$config_file" "${password_files[@]}"
     echo "Saved configuration has been reset. You will be prompted for the values again."
     ;;
   --help|-h)
     echo "Usage: bash scripts/postgresql-refresh-dev.sh [--reset-config]"
-    echo "  --reset-config  Remove saved configuration and the locally stored RDS password."
+    echo "  --reset-config  Remove saved configuration and all locally stored passwords."
     exit 0
     ;;
   *)
@@ -146,6 +156,40 @@ prompt_with_default() {
   printf -v "$variable_name" '%s' "${answer:-$default_value}"
 }
 
+prompt_secret_with_last() {
+  local variable_name="$1" label="$2" password_file="$3" value
+  if [[ -L "$password_file" || ( -e "$password_file" && ! -f "$password_file" ) ]]; then
+    echo "ERROR: Saved password path is not a regular file: $password_file"
+    return 1
+  fi
+  if [[ -f "$password_file" ]]; then
+    chmod 600 "$password_file"
+    read -r -s -p "$label (Enter = use last password; type new password to replace): " value
+  else
+    read -r -s -p "$label (will be saved locally for next run): " value
+  fi
+  echo
+  if [[ -z "$value" && -f "$password_file" ]]; then value="$(<"$password_file")"; fi
+  [[ -n "$value" ]] || { echo "ERROR: $label cannot be empty."; return 1; }
+  OPS_TOOLKIT_SECRET_VALUE="$value" python - "$password_file" <<'PY'
+import os, sys, tempfile
+path = sys.argv[1]
+fd, temporary_path = tempfile.mkstemp(prefix=".saved-password.", dir=os.path.dirname(path))
+try:
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(os.environ["OPS_TOOLKIT_SECRET_VALUE"])
+    os.replace(temporary_path, path)
+    os.chmod(path, 0o600)
+except Exception:
+    try: os.unlink(temporary_path)
+    except FileNotFoundError: pass
+    raise
+PY
+  printf -v "$variable_name" '%s' "$value"
+  unset value
+}
+
 valid_identifier() {
   [[ "$1" =~ ^[a-zA-Z_][a-zA-Z0-9_]{0,62}$ ]]
 }
@@ -162,55 +206,7 @@ prompt_with_default source_host "RDS endpoint/hostname" "$source_host_default"
 prompt_with_default source_port "RDS port" "$source_port_default"
 prompt_with_default source_database "Production database name" "$source_database_default"
 prompt_with_default source_username "RDS database username" "$source_username_default"
-if [[ -L "$last_password_file" ]]; then
-  echo "ERROR: The saved RDS password path is a symbolic link."
-  exit 1
-fi
-if [[ -e "$last_password_file" && ! -f "$last_password_file" ]]; then
-  echo "ERROR: The saved RDS password path is not a regular file."
-  exit 1
-fi
-
-if [[ -f "$last_password_file" ]]; then
-  chmod 600 "$last_password_file"
-  read -r -s -p "RDS database password (Enter = use last password; type new password to replace): " source_password
-  echo
-  if [[ -z "$source_password" ]]; then
-    source_password="$(<"$last_password_file")"
-  fi
-else
-  read -r -s -p "RDS database password (will be saved locally for next run): " source_password
-  echo
-fi
-
-[[ -n "$source_password" ]] || {
-  echo "ERROR: RDS database password cannot be empty."
-  exit 1
-}
-
-# Store the password separately from non-secret configuration, with owner-only
-# permissions. Write atomically so an interrupted run cannot leave a partial secret.
-OPS_TOOLKIT_RDS_PASSWORD="$source_password" python - "$last_password_file" <<'PY'
-import os
-import sys
-import tempfile
-
-path = sys.argv[1]
-directory = os.path.dirname(path)
-fd, temporary_path = tempfile.mkstemp(prefix=".rds-password.", dir=directory)
-try:
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(os.environ["OPS_TOOLKIT_RDS_PASSWORD"])
-    os.replace(temporary_path, path)
-    os.chmod(path, 0o600)
-except Exception:
-    try:
-        os.unlink(temporary_path)
-    except FileNotFoundError:
-        pass
-    raise
-PY
+prompt_secret_with_last source_password "RDS database password" "$last_password_file" || exit 1
 
 prompt_with_default target_server "Development PostgreSQL server IP/hostname" "$target_server_default"
 prompt_with_default ssh_user "Development server SSH username" "$ssh_user_default"
@@ -218,8 +214,7 @@ prompt_with_default target_port "Development PostgreSQL port" "$target_port_defa
 prompt_with_default target_database "Development database name" "${target_database_default:-$source_database}"
 prompt_with_default target_owner "Development database owner" "$target_owner_default"
 prompt_with_default app_username "Development application username" "$app_username_default"
-read -r -s -p "Development application password (not saved; used only if the role does not exist; at least 16 characters): " app_password
-echo
+prompt_secret_with_last app_password "Development application password (used only if the role does not exist; at least 16 characters)" "$app_password_file" || exit 1
 prompt_with_default listen_address "PostgreSQL listen address (use localhost for local access)" "$listen_address_default"
 read -r -p "Application source CIDR [${app_client_cidr_default:-blank}] (comma-separated for multiple CIDRs; enter 'none' for local-only access): " app_client_cidr_input
 if [[ "$app_client_cidr_input" == "none" ]]; then
@@ -388,20 +383,29 @@ if [[ -f "$ssh_key_path" && -r "$ssh_key_path" ]] &&
    ssh -i "$ssh_key_path" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 "$ssh_target" true; then
   ssh_auth="key"
   echo "SSH key authentication succeeded."
-  read -r -s -p "Sudo password for $ssh_user: " sudo_password
-  echo
+  prompt_secret_with_last sudo_password "Sudo password for $ssh_user" "$sudo_password_file" || exit 1
 else
   echo "SSH key is unavailable or authentication failed; falling back to SSH password authentication."
   command -v sshpass >/dev/null 2>&1 || {
     echo "ERROR: sshpass is not installed. Debian/Ubuntu/Kali: sudo apt install sshpass"
     exit 1
   }
-  read -r -s -p "SSH password (also used for sudo): " ssh_password
-  echo
-  [[ -n "$ssh_password" ]] || {
-    echo "ERROR: SSH password cannot be empty."
-    exit 1
-  }
+  prompt_secret_with_last ssh_password "SSH password (also used for sudo)" "$ssh_password_file" || exit 1
+  sudo_password="$ssh_password"
+  OPS_TOOLKIT_SECRET_VALUE="$sudo_password" python - "$sudo_password_file" <<'PY'
+import os, sys, tempfile
+path = sys.argv[1]
+fd, temporary_path = tempfile.mkstemp(prefix=".saved-password.", dir=os.path.dirname(path))
+try:
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle: handle.write(os.environ["OPS_TOOLKIT_SECRET_VALUE"])
+    os.replace(temporary_path, path)
+    os.chmod(path, 0o600)
+except Exception:
+    try: os.unlink(temporary_path)
+    except FileNotFoundError: pass
+    raise
+PY
   auth_file="$(mktemp "${TMPDIR:-/tmp}/ops-toolkit-ssh.XXXXXX")"
   chmod 600 "$auth_file"
   printf '%s\n' "$ssh_password" > "$auth_file"
