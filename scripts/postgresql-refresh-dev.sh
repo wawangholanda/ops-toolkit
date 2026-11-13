@@ -18,6 +18,7 @@ defaults_file=""
 config_parent="${XDG_CONFIG_HOME:-$HOME/.config}/ops-toolkit"
 config_dir="$config_parent/postgresql-refresh-dev"
 config_file="$config_dir/config.json"
+last_password_file="$config_dir/rds-password"
 
 cleanup() {
   rm -f -- "${auth_file:-}" "${secret_file:-}" "${inventory_file:-}" "${defaults_file:-}"
@@ -48,16 +49,16 @@ case "${1:-}" in
       echo "ERROR: The config directory is a symbolic link; it will not be removed."
       exit 1
     fi
-    if [[ -L "$config_file" ]]; then
-      echo "ERROR: The config path is a symbolic link; it will not be removed."
+    if [[ -L "$config_file" || -L "$last_password_file" ]]; then
+      echo "ERROR: A saved configuration path is a symbolic link; it will not be removed."
       exit 1
     fi
-    rm -f -- "$config_file"
+    rm -f -- "$config_file" "$last_password_file"
     echo "Saved configuration has been reset. You will be prompted for the values again."
     ;;
   --help|-h)
     echo "Usage: bash scripts/postgresql-refresh-dev.sh [--reset-config]"
-    echo "  --reset-config  Remove saved non-secret configuration and start again."
+    echo "  --reset-config  Remove saved configuration and the locally stored RDS password."
     exit 0
     ;;
   *)
@@ -161,8 +162,55 @@ prompt_with_default source_host "RDS endpoint/hostname" "$source_host_default"
 prompt_with_default source_port "RDS port" "$source_port_default"
 prompt_with_default source_database "Production database name" "$source_database_default"
 prompt_with_default source_username "RDS database username" "$source_username_default"
-read -r -s -p "RDS database password (not saved): " source_password
-echo
+if [[ -L "$last_password_file" ]]; then
+  echo "ERROR: The saved RDS password path is a symbolic link."
+  exit 1
+fi
+if [[ -e "$last_password_file" && ! -f "$last_password_file" ]]; then
+  echo "ERROR: The saved RDS password path is not a regular file."
+  exit 1
+fi
+
+if [[ -f "$last_password_file" ]]; then
+  chmod 600 "$last_password_file"
+  read -r -s -p "RDS database password (Enter = use last password; type new password to replace): " source_password
+  echo
+  if [[ -z "$source_password" ]]; then
+    source_password="$(<"$last_password_file")"
+  fi
+else
+  read -r -s -p "RDS database password (will be saved locally for next run): " source_password
+  echo
+fi
+
+[[ -n "$source_password" ]] || {
+  echo "ERROR: RDS database password cannot be empty."
+  exit 1
+}
+
+# Store the password separately from non-secret configuration, with owner-only
+# permissions. Write atomically so an interrupted run cannot leave a partial secret.
+OPS_TOOLKIT_RDS_PASSWORD="$source_password" python - "$last_password_file" <<'PY'
+import os
+import sys
+import tempfile
+
+path = sys.argv[1]
+directory = os.path.dirname(path)
+fd, temporary_path = tempfile.mkstemp(prefix=".rds-password.", dir=directory)
+try:
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(os.environ["OPS_TOOLKIT_RDS_PASSWORD"])
+    os.replace(temporary_path, path)
+    os.chmod(path, 0o600)
+except Exception:
+    try:
+        os.unlink(temporary_path)
+    except FileNotFoundError:
+        pass
+    raise
+PY
 
 prompt_with_default target_server "Development PostgreSQL server IP/hostname" "$target_server_default"
 prompt_with_default ssh_user "Development server SSH username" "$ssh_user_default"
