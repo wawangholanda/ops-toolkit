@@ -351,7 +351,7 @@
           - "{{ postgresql_refresh_target_database }}"
         stdin: |
           GRANT CONNECT ON DATABASE :"target_db" TO :"app_user";
-          SELECT format('GRANT USAGE ON SCHEMA %I TO %I', nspname, :'app_user')
+          SELECT format('GRANT USAGE, CREATE ON SCHEMA %I TO %I', nspname, :'app_user')
           FROM pg_namespace WHERE nspname <> 'information_schema' AND nspname NOT LIKE 'pg_%'
           \gexec
           SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO %I', nspname, :'app_user')
